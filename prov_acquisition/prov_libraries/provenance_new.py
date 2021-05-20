@@ -663,10 +663,13 @@ class Provenance:
                 # for index deletex consecutively
                 hash_in = value_in[el + deleted_items]
                 hash_out = value_out[el]
+        if len(index_out)==0:
+            for i in range(len(index_in)):
+                delIndex.append(i)
         #print(deleted_items, delIndex)
         # Create selection activity:
         if len(delIndex)>0:
-            act_id = self.create_activity(function_name, columns_in, description, deleted_records = True)
+            act_id = self.create_activity(function_name, list(columns_in), description, deleted_records = True)
         elif len(delColumnsName)>0:
             act_id = self.create_activity(function_name, list(delColumnsName), description, deleted_used_features = True)
         invalidated=[]
