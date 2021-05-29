@@ -656,7 +656,7 @@ class Provenance:
         deleted_items = 0
         for el in range(len(index_out)):
             hash_in = value_in[el + deleted_items]
-            hash_out = value_in[el]
+            hash_out = value_out[el]
             while hash_in != hash_out:
                 delIndex.append(el + deleted_items)
                 deleted_items += 1
