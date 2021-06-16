@@ -654,31 +654,31 @@ class Provenance:
         hash_out_df = pd.util.hash_pandas_object(df_out, index=False)
         value_out = hash_out_df.values
         deleted_items = 0
-        for el in range(len(index_out)):
-            hash_in = value_in[el + deleted_items]
-            hash_out = value_out[el]
-            while hash_in != hash_out:
-                delIndex.append(el + deleted_items)
-                deleted_items += 1
-                # for index deletex consecutively
+        if len(index_out) < len(index_in):
+            for el in range(len(index_out)):
                 hash_in = value_in[el + deleted_items]
                 hash_out = value_out[el]
-        if len(index_out)==0:
+                while hash_in != hash_out or (el + deleted_items) == (len(index_in) - 1):
+                    delIndex.append(el + deleted_items)
+                    deleted_items += 1
+                    # for index deletex consecutively
+                    hash_in = value_in[el + deleted_items]
+                    hash_out = value_out[el]
+        if len(index_out) == 0:
             for i in range(len(index_in)):
                 delIndex.append(i)
-        #print(deleted_items, delIndex)
+        # print(deleted_items, delIndex)
         # Create selection activity:
-        if len(delIndex)>0:
-            act_id = self.create_activity(function_name, list(columns_in), description, deleted_records = True)
-        elif len(delColumnsName)>0:
-            act_id = self.create_activity(function_name, list(delColumnsName), description, deleted_used_features = True)
-        invalidated=[]
+        if len(delIndex) > 0:
+            act_id = self.create_activity(function_name, list(columns_in), description, deleted_records=True)
+        elif len(delColumnsName) > 0:
+            act_id = self.create_activity(function_name, list(delColumnsName), description, deleted_used_features=True)
+        invalidated = []
         for i in delIndex:
             for j in range(n):
                 e_in = entities_in[i][j]
                 e_in_identifier = e_in['id']
                 invalidated.append(e_in_identifier)
-
         delColumns = []
         for colName in delColumnsName:
             j = columns_in.get_loc(colName)
@@ -700,7 +700,8 @@ class Provenance:
 
         return self
 
-    @timing
+
+@timing
     def get_prov_instance_generation(self, df_out, columnsName, description=None):
         """Return provenance document related to instance generation function."""
         # compatta tutto, ogni colonna di derivazione un attività
