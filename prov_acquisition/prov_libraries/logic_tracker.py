@@ -22,7 +22,7 @@ def shape_change_provenance_tracking(prov_tracker_obj):
             print(f'Space transform detected, {dropped_col} generated the new column{prov_tracker_obj.col_add}.')
             print('Warning: Remember that the last dropped columns (last operation) are the columns linked to the space transform.'
                   ' If you want to use space transform without dropping columns use stop_space_prov([col_joined]) method indicating the column joined in the transformation')
-            prov_tracker_obj.provenance_obj=prov_tracker_obj.provenance_obj.get_prov_space_transformation(new_df,dropped_col,prov_tracker_obj.description)
+            prov_tracker_obj.provenance_obj=prov_tracker_obj.provenance_obj.get_prov_space_transformation(new_df,dropped_col,0,prov_tracker_obj.description)
             prov_tracker_obj.reset_description()
             prov_tracker_obj.col_add=[]
             return

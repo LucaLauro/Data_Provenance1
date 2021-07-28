@@ -131,13 +131,13 @@ class ProvenanceTracker:
             global_tracker = self
         self._copy_df = self._df.copy()
 
-    def stop_space_prov(self,col_joined):
+    def stop_space_prov(self,col_joined, shift_period=0):
         # Optional method for Space transformations, use it to capture the provenance of a space transformation without delete any column
         print(f'Space transform, {col_joined} generated the new columns {self.col_add}')
         self.col_add = []
         if type(col_joined)==str:
             col_joined = [col_joined]
-        self.provenance_obj.get_prov_space_transformation(self._df, col_joined,self.description)
+        self.provenance_obj.get_prov_space_transformation(self._df, col_joined,shift_period, self.description)
         self.reset_description()
         return
 
@@ -174,8 +174,10 @@ class ProvenanceTracker:
     def reset_used_columns(self):
         self.columns_used=[]
 
-
-
+    def checkpoint(self,columns_to_check):
+        print(f'Checkpoint on {columns_to_check}')
+        self.provenance_obj.checkpoint(self._df,columns_to_check, self.description)
+        self.reset_description()
 class New_df(pd.DataFrame):
     # Override of __setitem__ of pandas, when item is set the changes are recorded
     def __setitem__(self, key, value):

@@ -441,20 +441,20 @@ class Provenance:
         return self
 
     def space_transformation_multiprocess(self, process_num, start, stop, entities_in, indexes_new, df_out,
-                                          entities_out, act_id, indexes, columns_in, queue, values):
+                                          entities_out, act_id, indexes, columns_in, queue, values,shift_period):
         generated = []
         used = []
         invalidated = []
         for i in range(start, stop):
-            first_ent = entities_in[i][0]
+            first_ent = entities_in[i+shift_period][0]
             record_id = first_ent['record_id']
             not_inserted=True
             for j in indexes_new:
-                value = str(values[i, j])
-                e_out = self.create_entity( record_id, value, df_out.columns[j], df_out.index[i],
+                value = str(values[i+shift_period, j])
+                e_out = self.create_entity( record_id, value, df_out.columns[j], df_out.index[i+shift_period],
                                            self.operation_number)
                 e_out_identifier = e_out['id']
-                entities_out[i][j] = e_out
+                entities_out[i+shift_period][j] = e_out
                 generated.append(e_out_identifier)
                 for index in indexes:
                     e_in = entities_in[i][index]
@@ -465,13 +465,13 @@ class Provenance:
                         if columns_in[index] not in df_out.columns:
                             invalidated.append(e_in_identifier)
                 not_inserted=False
-            if i == len(df_out.index) - 1:
+            if i == len(df_out.index) - 1 - shift_period:
                 stop = i + 1
                 break
-        queue.put((process_num, start, stop, entities_out[start:stop], current_derivations, new_entities, generated, used, invalidated))
+        queue.put((process_num, start, stop, entities_out[start+shift_period:stop+shift_period], current_derivations, new_entities, generated, used, invalidated))
 
     @timing
-    def get_prov_space_transformation(self, df_out, columnsName, description):
+    def get_prov_space_transformation(self, df_out, columnsName,shift_period, description):
         """Return provenance document related to space trasformation function.
 
         Keyword argument:
@@ -523,20 +523,21 @@ class Provenance:
         process_num = 0
         queue = Queue()
         # split the rows in chunks
+
         if m / self.CHUNK_INDEX_SIZE > cpu_num:
             chunk_size = int(m / cpu_num)
             for i in range(0, m, chunk_size):
                 process_num += 1
                 p = Process(target=self.space_transformation_multiprocess, args=(
                 process_num, i, i + chunk_size, entities_in, indexes_new, df_out, entities_out, act_id, indexes,
-                columns_in, queue, values))
+                columns_in, queue, values, shift_period))
                 process_list.append(p)
         else:
             for i in range(0, m, self.CHUNK_INDEX_SIZE):
                 process_num += 1
                 p = Process(target=self.space_transformation_multiprocess, args=(
                 process_num, i, i + self.CHUNK_INDEX_SIZE, entities_in, indexes_new, df_out, entities_out, act_id,
-                indexes, columns_in, queue, values))
+                indexes, columns_in, queue, values, shift_period))
                 process_list.append(p)
         for process in process_list:
             process.start()
@@ -544,17 +545,29 @@ class Provenance:
         for process in process_list:
             process.join()
         results.sort(key=lambda tup: tup[0])
+        if shift_period>0:
+            for s in range(shift_period):
+                first_ent = entities_in[s][0]
+                record_id = first_ent['record_id']
+                for j in indexes_new:
+                    value = str(values[s, j])
+                    print(value)
+                    e_out = self.create_entity(record_id, value, df_out.columns[j], df_out.index[s],
+                                               self.operation_number)
+                    e_out_identifier = e_out['id']
+                    generated.append(e_out_identifier)
+                    entities_out[s][j] = e_out
         for part in results:
             start = part[1]
             stop = part[2]
-            entities_out[start:stop, :] = part[3]
+            entities_out[start+shift_period:stop+shift_period, :] = part[3]
             self.current_derivations = self.current_derivations + part[4]
             self.new_entities = self.new_entities + part[5]
             generated = generated + part[6]
             used = used + part[7]
             invalidated = invalidated + part[8]
-        self.create_relation(act_id, generated=generated, used=used, invalidated=invalidated)
 
+        self.create_relation(act_id, generated=generated, used=used, invalidated=invalidated)
         print('scansione: ', time.time() - time_start)
         time_start3= time.time()
         # Rearrange unchanged columns:
@@ -563,7 +576,7 @@ class Provenance:
                 old_j = columns_in.get_loc(col_name)
                 new_j = columns_out.get_loc(col_name)
                 entities_out[:, new_j] = entities_in[:, old_j]
-        # print(entities_out)
+        #print(entities_out)
         # print(type(entities_out))
         print(f'rearrange{time.time()-time_start3}')
         # Update current values:
@@ -659,23 +672,23 @@ class Provenance:
                 hash_in = value_in[el + deleted_items]
                 hash_out = value_out[el]
                 while hash_in != hash_out:
-                    if (el + deleted_items) == (len(index_in) - 1):
+                    if (el+deleted_items)==(len(index_in)-1):
                         break
                     delIndex.append(el + deleted_items)
                     deleted_items += 1
                     # for index deletex consecutively
                     hash_in = value_in[el + deleted_items]
                     hash_out = value_out[el]
-        if len(index_out) == 0:
+        if len(index_out)==0:
             for i in range(len(index_in)):
                 delIndex.append(i)
-        # print(deleted_items, delIndex)
+        #print(deleted_items, delIndex)
         # Create selection activity:
-        if len(delIndex) > 0:
-            act_id = self.create_activity(function_name, list(columns_in), description, deleted_records=True)
-        elif len(delColumnsName) > 0:
-            act_id = self.create_activity(function_name, list(delColumnsName), description, deleted_used_features=True)
-        invalidated = []
+        if len(delIndex)>0:
+            act_id = self.create_activity(function_name, list(columns_in), description, deleted_records = True)
+        elif len(delColumnsName)>0:
+            act_id = self.create_activity(function_name, list(delColumnsName), description, deleted_used_features = True)
+        invalidated=[]
         for i in delIndex:
             for j in range(n):
                 e_in = entities_in[i][j]
@@ -1598,7 +1611,50 @@ class Provenance:
 
         return self
 
+    def checkpoint(self,df_out,columns_to_check, description=None):
 
+        """Return provenance document related to features trasformation function.
+
+                Keyword argument:
+                df_out -- the output dataframe
+                columns_to_check -- list of columns to check
+                """
+        function_name = 'Checkpoint'
+        self.initialize()
+        # Get current values:
+        entities_in = self.current_ent
+        # Output values:
+        columns_out = df_out.columns
+        indexes_out = df_out.index
+        values = df_out.values
+        for col_name in columns_to_check:
+            act_id = self.create_activity(function_name, col_name, description)
+            col_index = columns_out.get_loc(col_name)
+            generated = []
+            used = []
+            invalidated = []
+            for i in range(self.current_m):
+                e_in = entities_in[i][col_index]
+                e_in_identifier = e_in['id']
+                record_id = e_in['record_id']
+                value = str(values[i, col_index])
+                # Create a new entity with new value:
+                e_out = self.create_entity(record_id, value, col_name, indexes_out[i], self.operation_number)
+                e_out_identifier = e_out['id']
+                self.create_derivation(e_in_identifier, e_out_identifier)
+                generated.append(e_out_identifier)
+                used.append(e_in_identifier)
+                invalidated.append(e_in_identifier)
+                entities_in[i][col_index] = e_out
+            self.create_relation(act_id, generated=generated, used=used, invalidated=invalidated)
+
+        # Update current values:
+        self.set_current_values(df_out, entities_in)
+
+        # Save provenance document in json file:
+        self.save_json_prov(os.path.join(self.results_path, self.instance))
+
+        return self
 def get_size_format(b, factor=1024, suffix='B'):
     for unit in ['', 'K', 'M', 'G', 'T', 'P', 'E', 'Z']:
         if b < 1024:
