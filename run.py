@@ -6,3 +6,6 @@ def run(dbname, filepath):
     create_mongo_pandas.main(dbname, filepath)
     myapp_no_main.main(dbname)
 
+def run2(dbname):
+    print('run',dbname)
+    myapp_no_main.main(dbname)

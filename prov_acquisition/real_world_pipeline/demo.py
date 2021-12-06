@@ -35,7 +35,7 @@ def main():
     print('[' + time.strftime("%d/%m-%H:%M:%S") + '] Initialization')
     # Create a new provenance document
 
-    p = pr.Provenance(df, savepath)
+    p = pr.Provenance(df,'', savepath)
 
     # create provanance tracker
     tracker=ProvenanceTracker.ProvenanceTracker(df, p)
