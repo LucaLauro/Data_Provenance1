@@ -107,7 +107,7 @@ class ProvenanceTracker:
             print('Join detected')
             #launch provenance
             print('Warning, use the principal df as left df and second df as right df. Only standard suffix will work. Duplicate rows will not work')
-            self.provenance_obj.get_prov_join(self._df,self.join_operation['on'],self.description)
+            self.provenance_obj.prov_join_hash(self._df,self.join_operation['on'],self.description)
             self.reset_description()
             # reset join op
             self.join_operation['on'] = None
@@ -118,7 +118,7 @@ class ProvenanceTracker:
         t = time.time()
         # if not a union or a join search for any difference
         self.dataframe_is_changed()
-        print(f'dataframe is changed {time.time()-t}')
+        #print(f'dataframe is changed {time.time()-t}')
         if self.shape_change:
             # shape is changed
             logic_tracker.shape_change_provenance_tracking(self)

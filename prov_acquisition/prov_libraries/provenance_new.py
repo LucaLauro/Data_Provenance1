@@ -5,6 +5,8 @@ import os
 import time
 import json
 from multiprocessing import Process, Queue
+from run import run2
+import pymongo
 
 # global variables for multiprocessing operations
 global current_relation
@@ -21,8 +23,8 @@ class Provenance:
     NAMESPACE_ENTITY = 'entity:'
     INPUT = 'input'
     OUTPUT = 'output'
-    LIST_REL_SIZE=25000
-    CHUNK_SIZE = 15000
+    LIST_REL_SIZE = 25000
+    CHUNK_SIZE = 100000
     CHUNK_INDEX_SIZE = 1000
     # PROV-N objects
     ENTITY = 'prov:entity'
@@ -40,12 +42,15 @@ class Provenance:
 
     SEPARATOR = '^^'
 
-    def __init__(self, df, results_path=None):
+    def __init__(self, df, dbname, results_path=None):
+        p = Process(target=run2, args=(dbname,))
+        # p.start()
+        self.dbname = dbname
         # Inizialize provenance activities, relations and new entities
         self.current_act = []
         self.current_relations = []
         self.new_entities = []
-        self.current_derivations=[]
+        self.current_derivations = []
         # Initialize operation number:
         self.operation_number = -1
         self.instance = self.OUTPUT + str(self.operation_number)
@@ -112,14 +117,15 @@ class Provenance:
         """Create a provenance entity.
         Return a dictionary with the id and the record_id of the entity."""
         # Get attributes:
-        id=value+self.SEPARATOR+feature_name+self.SEPARATOR+str(index)+self.SEPARATOR+str(instance)
+        id = value + self.SEPARATOR + feature_name + self.SEPARATOR + str(index) + self.SEPARATOR + str(instance)
         # Add entity to new numpy array entities:
         ent = {'id': id, 'record_id': record_id}
         self.new_entities.append(ent)
         new_entities.append(ent)
         return ent
 
-    def create_activity(self, function_name, features_name=None, description=None, other_attributes=None,generated_features=None,deleted_used_features=None, deleted_records=None):
+    def create_activity(self, function_name, features_name=None, description=None, other_attributes=None,
+                        generated_features=None, deleted_used_features=None, deleted_records=None):
         """Create a provenance activity and add to the current activities array.
         Return the id of the new prov activity."""
         # Get default activity attributes:
@@ -140,7 +146,15 @@ class Provenance:
         # Join default and extra attributes:
         if other_attributes is not None:
             attributes.update(other_attributes)
+        """
+        client = pymongo.MongoClient('localhost', 27017, connect=False)  # cancella e ricrea collection dashboard
+        db = client[self.dbname]
+        entities_count=db.entities.count_documents({})
+        relations_count=int(db.relations.count_documents({})) + int(db.derivations.count_documents({}))
 
+        db.dashboard.insert_one({'time':time.time()*1000,'function_name':function_name,'entities':entities_count, 'relations':relations_count})
+        client.close()
+        """
         act_id = self.NAMESPACE_FUNC + str(uuid.uuid4())
 
         # Add activity to current provenance document:
@@ -148,7 +162,6 @@ class Provenance:
         self.current_act.append(act)
 
         return act_id
-
 
     def create_relation(self, act_id, generated=None, used=None, invalidated=None):
         """Add a relation to the current relations array.
@@ -159,21 +172,21 @@ class Provenance:
             used = []
         if invalidated is None:
             invalidated = []
-        max_length=max(len(generated),len(used),len(invalidated))
+        max_length = max(len(generated), len(used), len(invalidated))
         if max_length > self.LIST_REL_SIZE:
             for i in range(0, max_length, self.LIST_REL_SIZE):
                 # split in multiple activity if the list of generated, used or invalidated are too big
                 partial_rel = dict()
                 partial_rel['id'] = act_id
-                if len(generated)>0:
-                    if len(generated)>i :
-                        partial_rel['generated'] = generated[i:i+self.LIST_REL_SIZE]
+                if len(generated) > 0:
+                    if len(generated) > i:
+                        partial_rel['generated'] = generated[i:i + self.LIST_REL_SIZE]
                 if len(used) > 0:
                     if len(used) > i:
-                        partial_rel['used'] = used[i:i+self.LIST_REL_SIZE]
+                        partial_rel['used'] = used[i:i + self.LIST_REL_SIZE]
                 if len(invalidated) > 0:
                     if len(invalidated) > i:
-                        partial_rel['invalidated'] = invalidated[i:i+self.LIST_REL_SIZE]
+                        partial_rel['invalidated'] = invalidated[i:i + self.LIST_REL_SIZE]
                 self.current_relations.append(partial_rel)
                 current_relation.append(partial_rel)
         else:
@@ -183,16 +196,16 @@ class Provenance:
                 relation['generated'] = generated
             if len(used) > 0:
                 relation['used'] = used
-            if len(invalidated) > 0 :
+            if len(invalidated) > 0:
                 relation['invalidated'] = invalidated
             self.current_relations.append(relation)
             current_relation.append(relation)
 
-    def create_derivation(self,used_ent, gen_ent):
+    def create_derivation(self, used_ent, gen_ent):
         """
         Add a derivation to the current relations array.
         """
-        derivation={'gen':gen_ent,'used':used_ent}
+        derivation = {'gen': gen_ent, 'used': used_ent}
         self.current_derivations.append(derivation)
         current_derivations.append(derivation)
 
@@ -206,6 +219,13 @@ class Provenance:
             ents = entities[ind:ind + self.CHUNK_SIZE]
             json.dump(ents, ents_file, ensure_ascii=False, indent=4)
 
+    def save_entities_db_multiproc(self, entities, ind):
+        client = pymongo.MongoClient('localhost', 27017, connect=False)  # cancella e ricrea collection dashboard
+        self.db = client[self.dbname]
+        ents = entities[ind:ind + self.CHUNK_SIZE]
+        self.db.entities.insert_many(ents)
+        client.close()
+
     def save_entities_multiproc(self, entities, ents_path):
         """
             split the entities list in n list of chunck size lenght and launch a process for each
@@ -214,6 +234,7 @@ class Provenance:
         process_list = []
         for ind in range(0, len(entities), self.CHUNK_SIZE):
             p = Process(target=self.save_entities_multiproc1, args=(entities, ents_path, ind))
+            # p = Process(target=self.save_entities_db_multiproc, args=(entities, ind))
             process_list.append(p)
         cpu_num = os.cpu_count()
         num_proc_run = 0
@@ -226,6 +247,13 @@ class Provenance:
                 index_proc += cpu_num
             num_proc_run += 1
             p.start()
+
+    def save_deriv_db_multiproc(self, ind):
+        client = pymongo.MongoClient('localhost', 27017, connect=False)  # cancella e ricrea collection dashboard
+        self.db = client[self.dbname]
+        deriv = self.current_derivations[ind:ind + self.CHUNK_SIZE]
+        self.db.derivations.insert_many(deriv)
+        client.close
 
     def save_deriv_multiproc1(self, deriv_path, ind):
         """
@@ -237,13 +265,15 @@ class Provenance:
             deriv = self.current_derivations[ind:ind + self.CHUNK_SIZE]
             json.dump(deriv, deriv_file, ensure_ascii=False, indent=4)
 
-    def save_deriv_multiproc(self,deriv_path):
+    def save_deriv_multiproc(self, deriv_path):
         """
             split the derivations list in n list of chunck size lenght and launch a process for each
         """
         process_list = []
         for ind in range(0, len(self.current_derivations), self.CHUNK_SIZE):
-            p = Process(target=self.save_deriv_multiproc1, args=(deriv_path, ind))
+            p = Process(target=self.save_deriv_multiproc1, args=(deriv_path, ind,))
+            # p = Process(target=self.save_deriv_db_multiproc, args=(ind,))
+
             process_list.append(p)
         cpu_num = os.cpu_count()
         num_proc_run = 0
@@ -256,6 +286,7 @@ class Provenance:
                 index_proc += cpu_num
             num_proc_run += 1
             p.start()
+
     @timing
     def create_prov_entities(self, dataframe, instance=None):
         """Return a numpy array of new provenance entities related to the dataframe."""
@@ -284,7 +315,7 @@ class Provenance:
             for j in range(dataframe.shape[1]):
                 value = str(values[i, j])
                 # Add entity to current provenance document:
-                entities[i][j] = self.create_entity( record_id, value, columns[j], indexes[i],
+                entities[i][j] = self.create_entity(record_id, value, columns[j], indexes[i],
                                                     self.operation_number)
 
         # Save input entities in json files
@@ -312,6 +343,13 @@ class Provenance:
         self.operation_number += 1
         self.instance = self.OUTPUT + str(self.operation_number)
 
+    def save_rel_db_multiproc(self, ind):
+        client = pymongo.MongoClient('localhost', 27017, connect=False)  # cancella e ricrea collection dashboard
+        self.db = client[self.dbname]
+        rels = self.current_relations[ind:ind + 3]
+        self.db.relations.insert_many(rels)
+        client.close()
+
     def save_rel_multiproc1(self, rel_path, j):
         """
             save relations json
@@ -326,7 +364,9 @@ class Provenance:
         """split the derivations list in n list of chunck size lenght and launch a process for each"""
         process_list1 = []
         for j in range(0, len(self.current_relations), 3):
-            p_rel = Process(target=self.save_rel_multiproc1, args=(rel_path, j))
+            p_rel = Process(target=self.save_rel_multiproc1, args=(rel_path, j,))
+            # p_rel = Process(target=self.save_rel_db_multiproc, args=(j,))
+
             process_list1.append(p_rel)
         cpu_num = os.cpu_count()
         num_proc_run1 = 0
@@ -340,8 +380,6 @@ class Provenance:
             num_proc_run1 += 1
             proc.start()
 
-
-
     def save_json_prov(self, nameFile):
         """Save provenance in json file."""
         if not os.path.exists(nameFile):
@@ -350,24 +388,27 @@ class Provenance:
         ents_path = os.path.join(nameFile, 'entities')
         acts_path = os.path.join(nameFile, 'activities.json')
         rel_path = os.path.join(nameFile, 'relations')
-        deriv_path=os.path.join(nameFile, 'derivations')
+        deriv_path = os.path.join(nameFile, 'derivations')
 
         # Save entities:
         # entities = list(self.current_ent.flatten())
         entities = self.new_entities
 
         if entities:
-            #print(len(entities))
+            # print(len(entities))
             p1 = Process(target=self.save_entities_multiproc, args=(entities, ents_path))
 
         # Save activities:
         if self.current_act:
+            # client = pymongo.MongoClient('localhost', 27017, connect=False)  # cancella e ricrea collection dashboard
+            # self.db = client[self.dbname]
+            # self.db.activities.insert_many(self.current_act)
+            # client.close()
             with open(acts_path, 'w', encoding='utf-8') as acts_file:
                 json.dump(self.current_act, acts_file, ensure_ascii=False, indent=4)
 
         # Save all relations:
         if self.current_relations:
-
             p2 = Process(target=self.save_rel_multiproc, args=(rel_path,))
         if self.current_relations:
             p3 = Process(target=self.save_deriv_multiproc, args=(deriv_path,))
@@ -411,12 +452,13 @@ class Provenance:
         columns_out = df_out.columns
         indexes_out = df_out.index
         values = df_out.values
+        print(entities_in[1])
         for col_name in columnsName:
             act_id = self.create_activity(function_name, col_name, description)
             col_index = columns_out.get_loc(col_name)
-            generated=[]
-            used=[]
-            invalidated=[]
+            generated = []
+            used = []
+            invalidated = []
             for i in range(self.current_m):
                 e_in = entities_in[i][col_index]
                 e_in_identifier = e_in['id']
@@ -441,20 +483,20 @@ class Provenance:
         return self
 
     def space_transformation_multiprocess(self, process_num, start, stop, entities_in, indexes_new, df_out,
-                                          entities_out, act_id, indexes, columns_in, queue, values,shift_period):
+                                          entities_out, act_id, indexes, columns_in, queue, values, shift_period):
         generated = []
         used = []
         invalidated = []
         for i in range(start, stop):
-            first_ent = entities_in[i+shift_period][0]
+            first_ent = entities_in[i + shift_period][0]
             record_id = first_ent['record_id']
-            not_inserted=True
+            not_inserted = True
             for j in indexes_new:
-                value = str(values[i+shift_period, j])
-                e_out = self.create_entity( record_id, value, df_out.columns[j], df_out.index[i+shift_period],
+                value = str(values[i + shift_period, j])
+                e_out = self.create_entity(record_id, value, df_out.columns[j], df_out.index[i + shift_period],
                                            self.operation_number)
                 e_out_identifier = e_out['id']
-                entities_out[i+shift_period][j] = e_out
+                entities_out[i + shift_period][j] = e_out
                 generated.append(e_out_identifier)
                 for index in indexes:
                     e_in = entities_in[i][index]
@@ -464,14 +506,16 @@ class Provenance:
                         used.append(e_in_identifier)
                         if columns_in[index] not in df_out.columns:
                             invalidated.append(e_in_identifier)
-                not_inserted=False
+                not_inserted = False
             if i == len(df_out.index) - 1 - shift_period:
                 stop = i + 1
                 break
-        queue.put((process_num, start, stop, entities_out[start+shift_period:stop+shift_period], current_derivations, new_entities, generated, used, invalidated))
+        queue.put((
+                  process_num, start, stop, entities_out[start + shift_period:stop + shift_period], current_derivations,
+                  new_entities, generated, used, invalidated))
 
     @timing
-    def get_prov_space_transformation(self, df_out, columnsName,shift_period, description):
+    def get_prov_space_transformation(self, df_out, columnsName, shift_period, description):
         """Return provenance document related to space trasformation function.
 
         Keyword argument:
@@ -486,9 +530,9 @@ class Provenance:
         current_relation = []
         global current_derivations
         current_derivations = []
-        generated=[]
-        used=[]
-        invalidated=[]
+        generated = []
+        used = []
+        invalidated = []
         # Get current values:
         entities_in = self.current_ent
         m, n = self.current_m, self.current_n
@@ -512,9 +556,10 @@ class Provenance:
                 indexes_new.append(columns_out.get_loc(feature))
         drop_columns = [col for col in columnsName if col not in columns_out]
 
-        generated_features=[col for col in columns_out if col not in columns_in]
+        generated_features = [col for col in columns_out if col not in columns_in]
         # Create space transformation activity:
-        act_id = self.create_activity(function_name, columnsName, description,generated_features=generated_features,deleted_used_features=len(drop_columns)>0)
+        act_id = self.create_activity(function_name, columnsName, description, generated_features=generated_features,
+                                      deleted_used_features=len(drop_columns) > 0)
 
         time_start = time.time()
         # Get provenance related to the new column:
@@ -529,15 +574,15 @@ class Provenance:
             for i in range(0, m, chunk_size):
                 process_num += 1
                 p = Process(target=self.space_transformation_multiprocess, args=(
-                process_num, i, i + chunk_size, entities_in, indexes_new, df_out, entities_out, act_id, indexes,
-                columns_in, queue, values, shift_period))
+                    process_num, i, i + chunk_size, entities_in, indexes_new, df_out, entities_out, act_id, indexes,
+                    columns_in, queue, values, shift_period))
                 process_list.append(p)
         else:
             for i in range(0, m, self.CHUNK_INDEX_SIZE):
                 process_num += 1
                 p = Process(target=self.space_transformation_multiprocess, args=(
-                process_num, i, i + self.CHUNK_INDEX_SIZE, entities_in, indexes_new, df_out, entities_out, act_id,
-                indexes, columns_in, queue, values, shift_period))
+                    process_num, i, i + self.CHUNK_INDEX_SIZE, entities_in, indexes_new, df_out, entities_out, act_id,
+                    indexes, columns_in, queue, values, shift_period))
                 process_list.append(p)
         for process in process_list:
             process.start()
@@ -545,7 +590,7 @@ class Provenance:
         for process in process_list:
             process.join()
         results.sort(key=lambda tup: tup[0])
-        if shift_period>0:
+        if shift_period > 0:
             for s in range(shift_period):
                 first_ent = entities_in[s][0]
                 record_id = first_ent['record_id']
@@ -560,7 +605,7 @@ class Provenance:
         for part in results:
             start = part[1]
             stop = part[2]
-            entities_out[start+shift_period:stop+shift_period, :] = part[3]
+            entities_out[start + shift_period:stop + shift_period, :] = part[3]
             self.current_derivations = self.current_derivations + part[4]
             self.new_entities = self.new_entities + part[5]
             generated = generated + part[6]
@@ -569,19 +614,20 @@ class Provenance:
 
         self.create_relation(act_id, generated=generated, used=used, invalidated=invalidated)
         print('scansione: ', time.time() - time_start)
-        time_start3= time.time()
+        time_start3 = time.time()
         # Rearrange unchanged columns:
+
         for col_name in columns_out:
             if col_name in columns_in:
                 old_j = columns_in.get_loc(col_name)
                 new_j = columns_out.get_loc(col_name)
                 entities_out[:, new_j] = entities_in[:, old_j]
-        #print(entities_out)
+        # print(entities_out)
         # print(type(entities_out))
-        print(f'rearrange{time.time()-time_start3}')
+        print(f'rearrange{time.time() - time_start3}')
         # Update current values:
         self.set_current_values(df_out, entities_out)
-        print(f'dopo set {time.time()-time_start3}')
+        print(f'dopo set {time.time() - time_start3}')
         time_start2 = time.time()
         # Save provenance document in json file:
         self.save_json_prov(os.path.join(self.results_path, self.instance))
@@ -672,23 +718,23 @@ class Provenance:
                 hash_in = value_in[el + deleted_items]
                 hash_out = value_out[el]
                 while hash_in != hash_out:
-                    if (el+deleted_items)==(len(index_in)-1):
+                    if (el + deleted_items) == (len(index_in) - 1):
                         break
                     delIndex.append(el + deleted_items)
                     deleted_items += 1
                     # for index deletex consecutively
                     hash_in = value_in[el + deleted_items]
                     hash_out = value_out[el]
-        if len(index_out)==0:
+        if len(index_out) == 0:
             for i in range(len(index_in)):
                 delIndex.append(i)
-        #print(deleted_items, delIndex)
+        # print(deleted_items, delIndex)
         # Create selection activity:
-        if len(delIndex)>0:
-            act_id = self.create_activity(function_name, list(columns_in), description, deleted_records = True)
-        elif len(delColumnsName)>0:
-            act_id = self.create_activity(function_name, list(delColumnsName), description, deleted_used_features = True)
-        invalidated=[]
+        if len(delIndex) > 0:
+            act_id = self.create_activity(function_name, list(columns_in), description, deleted_records=True)
+        elif len(delColumnsName) > 0:
+            act_id = self.create_activity(function_name, list(delColumnsName), description, deleted_used_features=True)
+        invalidated = []
         for i in delIndex:
             for j in range(n):
                 e_in = entities_in[i][j]
@@ -733,11 +779,11 @@ class Provenance:
         # Create numpy array of new entities:
         new_entities = np.empty((m_new - m, n), dtype=object)
         values = df_out.values
-        #acts = {}
-        #used=dict()
-        used=[]
-        #generated=dict()
-        generated=[]
+        # acts = {}
+        # used=dict()
+        used = []
+        # generated=dict()
+        generated = []
         # Provenance of existent data
         """
         for col_name in columnsName:
@@ -760,7 +806,7 @@ class Provenance:
             col_index = columns_out.get_loc(col_name)
 
             for i in range(m):
-                #print(used)
+                # print(used)
                 e_in = entities_in[i][col_index]
                 ent_id = e_in['id']
                 used.append(ent_id)
@@ -772,30 +818,30 @@ class Provenance:
         # works only if the new data is appended to the df
         # Provenance of new data
 
-        default_generated=[]
+        default_generated = []
         for j in range(n):
             for i in range(m, m_new):
-                #print(new_entities.shape, i,j)
+                # print(new_entities.shape, i,j)
                 if j > 0:
-                    record_id = new_entities[i-m][0]['record_id']
+                    record_id = new_entities[i - m][0]['record_id']
                 else:
                     record_id = str(uuid.uuid4())
                 col_name = columns_out[j]
-                #act_id = acts[col_name] if col_name in acts else defaultAct_id
+                # act_id = acts[col_name] if col_name in acts else defaultAct_id
                 act_id = act_id_col_used if col_name in columnsName else defaultAct_id
                 value = str(values[i, j])
                 e_out = self.create_entity(record_id, value, col_name, indexes_out[i], self.operation_number)
                 e_out_identifier = e_out['id']
                 new_entities[i - m][j] = e_out
                 if col_name in columnsName:
-                    #if col_name in generated:
+                    # if col_name in generated:
                     #    generated[col_name]=generated[col_name]+[e_out_identifier]
-                    #else:
+                    # else:
                     #    generated[col_name]=[e_out_identifier]
                     generated.append(e_out_identifier)
                 else:
                     default_generated.append(e_out_identifier)
-            #if columns_out[j] in acts:
+            # if columns_out[j] in acts:
             #    self.create_relation(act_id, generated=generated[col_name], used=used[col_name])
         self.create_relation(defaultAct_id, generated=default_generated)
         self.create_relation(act_id_col_used, generated=generated, used=used)
@@ -858,7 +904,6 @@ class Provenance:
                     entities_in[i][col_index] = e_out
             self.create_relation(act_id, generated, used, invalidated)
 
-
         # Update current values:
         self.set_current_values(df_out, entities_in)
 
@@ -883,7 +928,7 @@ class Provenance:
         columns_out = df_out.columns
         indexes_out = df_out.index
         values = df_out.values
-        t=time.time()
+        t = time.time()
         for col_name in columnsName:
             act_id = self.create_activity(function_name, col_name, description)
             col_index = columns_out.get_loc(col_name)
@@ -911,19 +956,196 @@ class Provenance:
                 else:
                     used.append(e_in_identifier)
             self.create_relation(act_id, generated, used, invalidated)
-        print(f'dopo ciclo {time.time()-t}')
+        print(f'dopo ciclo {time.time() - t}')
         # Save provenance document in json file:
         self.save_json_prov(os.path.join(self.results_path, self.instance))
-        print(f'save {time.time()-t}')
+        print(f'save {time.time() - t}')
         # Update current values:
         self.set_current_values(df_out, entities_in)
-        print(f'set {time.time()-t}')
+        print(f'set {time.time() - t}')
 
+        return self
+
+    def prov_union_multiprocess(self, process_num, start, stop, indexes_out, df_out, values, columns_out, axis,
+                                column_second_df, entities_in, entities_out, entities_in_second_df,index_second_df, queue):
+        generated = []
+        used = []
+        invalidated = []
+        print(start,stop)
+        if axis == 0:
+            # faccio append su colonne (verso il basso)
+            # column append
+            for i in range(start,stop):
+                record_id = str(uuid.uuid4())
+                for j in range(len(columns_out)):
+                    value = str(values[i, j])
+                    col_name = columns_out[j]
+                    e_out = self.create_entity(record_id, value, col_name, indexes_out[i],
+                                               self.operation_number)
+                    e_out_identifier = e_out['id']
+                    if i < self.current_m:
+                        if j < len(self.current_columns):
+                            e_in = entities_in[i][j]
+                            e_in_identifier = e_in['id']
+                            self.create_derivation(e_in_identifier, e_out_identifier)
+                            generated.append(e_out_identifier)
+                            invalidated.append(e_in_identifier)
+                            used.append(e_in_identifier)
+
+                        else:
+                            # nan, no entity in
+                            generated.append(e_out_identifier)
+                            # self.create_derivation(act_id, e_out_identifier)
+                    else:
+                        # from second df
+                        if columns_out[j] in column_second_df:
+                            index_column = list(column_second_df).index(columns_out[j])
+                            e_in = entities_in_second_df[i - len(self.current_index)][index_column]
+                            e_in_identifier = e_in['id']
+                            self.create_derivation(e_in_identifier, e_out_identifier)
+                            generated.append(e_out_identifier)
+                            invalidated.append(e_in_identifier)
+                            used.append(e_in_identifier)
+
+                        else:
+                            # nan, no entity in
+                            generated.append(e_out_identifier)
+                            # self.create_derivation(act_id, e_out_identifier)
+                    entities_out[i][j] = e_out
+                if i == len(df_out.index) - 1:
+                    stop = i + 1
+                    break
+        elif axis == 1:
+            # colonne aggiunte e faccio append sull'indice(verso destra)
+            # columns append
+            for j in range(len(columns_out)):
+                for i in range(start,stop):
+                    value = str(values[i, j])
+                    if j > 0:
+                        record_id = entities_out[i][0]['record_id']
+                    else:
+                        record_id = str(uuid.uuid4())
+                    col_name = columns_out[j]
+                    e_out = self.create_entity(record_id, value, col_name, indexes_out[i],
+                                               self.operation_number)
+                    e_out_identifier = e_out['id']
+                    if j < len(self.current_columns):
+                        if i in self.current_index:
+                            # errore se metto i devo prima trovarlo
+                            index_index = list(self.current_index).index(indexes_out[i])
+                            e_in = entities_in[index_index][j]
+                            e_in_identifier = e_in['id']
+                            self.create_derivation(e_in_identifier, e_out_identifier)
+                            generated.append(e_out_identifier)
+                            invalidated.append(e_in_identifier)
+                            used.append(e_in_identifier)
+                        else:
+                            # nan, no entity in
+                            generated.append(e_out_identifier)
+                            # self.create_derivation(act_id, e_out_identifier)
+                    else:
+                        if indexes_out[i] in index_second_df:
+                            index_index = list(index_second_df).index(indexes_out[i])
+                            e_in = entities_in_second_df[index_index][j - len(self.current_columns)]
+                            e_in_identifier = e_in['id']
+                            self.create_derivation(e_in_identifier, e_out_identifier)
+                            generated.append(e_out_identifier)
+                            invalidated.append(e_in_identifier)
+                            used.append(e_in_identifier)
+                        else:
+                            # nan, no entity in
+                            generated.append(e_out_identifier)
+                        # self.create_derivation(act_id, e_out_identifier)
+                    entities_out[i][j] = e_out
+                    if i == len(df_out.index) - 1 :
+                        stop = i + 1
+                        break
+        else:
+            print('wrong axis')
+        print(len(generated),len(new_entities))
+        queue.put((process_num, start, stop, entities_out[start:stop], current_derivations, new_entities, generated,
+                   used, invalidated))
+    @timing
+    def get_prov_union(self, df_out, axis, description=None):
+        """Return provenance document related to union function.
+
+        Keyword argument:
+        df_out -- the output dataframe
+        axis -- axis of the union
+
+        """
+        print(df_out.shape)
+        function_name = 'Union'
+        self.initialize()
+        global new_entities
+        new_entities = []
+        global current_relation
+        current_relation = []
+        global current_derivations
+        current_derivations = []
+        # Get current values:
+        entities_in = self.current_ent
+        entities_in_second_df = self.current_second_ent
+        column_second_df = self.second_df.columns
+        index_second_df = self.second_df.index
+        list_columns = list(self.current_columns)
+        list_second_columns = list(column_second_df)
+        used_features = list(set(list_columns + list_second_columns))
+        # Output values:
+        columns_out = df_out.columns
+        indexes_out = df_out.index
+        values = df_out.values
+        entities_out = np.empty(df_out.shape, dtype=object)
+        act_id = self.create_activity(function_name, features_name=used_features, description=description)
+        cpu_num = os.cpu_count()
+        process_list = []
+        process_num = 0
+        queue = Queue()
+        m = df_out.shape[0]
+        generated = []
+        used = []
+        invalidated = []
+        if m / self.CHUNK_INDEX_SIZE > cpu_num:
+            chunk_size = int(m / cpu_num)
+            for i in range(0, m, chunk_size):
+                print(i, m)
+                process_num += 1
+                p = Process(target=self.prov_union_multiprocess, args=(
+                    process_num, i, i + chunk_size, indexes_out, df_out, values, columns_out, axis,
+                                column_second_df, entities_in, entities_out, entities_in_second_df,index_second_df, queue))
+                process_list.append(p)
+        else:
+            for i in range(0, m, self.CHUNK_INDEX_SIZE):
+                process_num += 1
+                p = Process(target=self.prov_union_multiprocess, args=(
+                    process_num, i, i + self.CHUNK_INDEX_SIZE, indexes_out, df_out, values, columns_out, axis,
+                                column_second_df, entities_in, entities_out, entities_in_second_df,index_second_df, queue))
+                process_list.append(p)
+        for process in process_list:
+            process.start()
+        results = [queue.get() for p in process_list]
+        for process in process_list:
+            process.join()
+        results.sort(key=lambda tup: tup[0])
+        for part in results:
+            start = part[1]
+            stop = part[2]
+            entities_out[start:stop, :] = part[3]
+            self.current_derivations = self.current_derivations + part[4]
+            self.new_entities = self.new_entities + part[5]
+            generated = generated + part[6]
+            used = used + part[7]
+            invalidated = invalidated + part[8]
+        self.create_relation(act_id, generated, used, invalidated)
+        # Save provenance document in json file:
+        self.save_json_prov(os.path.join(self.results_path, self.instance))
+        # Update current values:
+        self.set_current_values(df_out, entities_out)
 
         return self
 
     @timing
-    def get_prov_union(self, df_out, axis, description=None):
+    def get_prov_union_no_multiprocessing(self, df_out, axis, description=None):
         """Return provenance document related to union function.
 
         Keyword argument:
@@ -938,9 +1160,9 @@ class Provenance:
         entities_in_second_df = self.current_second_ent
         column_second_df = self.second_df.columns
         index_second_df = self.second_df.index
-        list_columns=list(self.current_columns)
-        list_second_columns=list(column_second_df)
-        used_features=list(set(list_columns+list_second_columns))
+        list_columns = list(self.current_columns)
+        list_second_columns = list(column_second_df)
+        used_features = list(set(list_columns + list_second_columns))
         # Output values:
         columns_out = df_out.columns
         indexes_out = df_out.index
@@ -973,7 +1195,7 @@ class Provenance:
                         else:
                             # nan, no entity in
                             generated.append(e_out_identifier)
-                            #self.create_derivation(act_id, e_out_identifier)
+                            # self.create_derivation(act_id, e_out_identifier)
                     else:
                         # from second df
                         if columns_out[j] in column_second_df:
@@ -988,16 +1210,16 @@ class Provenance:
                         else:
                             # nan, no entity in
                             generated.append(e_out_identifier)
-                            #self.create_derivation(act_id, e_out_identifier)
-                    entities_out[i][j]=e_out
+                            # self.create_derivation(act_id, e_out_identifier)
+                    entities_out[i][j] = e_out
         elif axis == 1:
             # colonne aggiunte e faccio append sull'indice(verso destra)
             # columns append
             for j in range(len(columns_out)):
                 for i in range(len(indexes_out)):
                     value = str(df_out.iat[i, j])
-                    if j>0:
-                        record_id=entities_out[i][0]['record_id']
+                    if j > 0:
+                        record_id = entities_out[i][0]['record_id']
                     else:
                         record_id = str(uuid.uuid4())
                     col_name = columns_out[j]
@@ -1017,7 +1239,7 @@ class Provenance:
                         else:
                             # nan, no entity in
                             generated.append(e_out_identifier)
-                            #self.create_derivation(act_id, e_out_identifier)
+                            # self.create_derivation(act_id, e_out_identifier)
                     else:
                         if indexes_out[i] in index_second_df:
                             index_index = list(index_second_df).index(indexes_out[i])
@@ -1030,8 +1252,8 @@ class Provenance:
                         else:
                             # nan, no entity in
                             generated.append(e_out_identifier)
-                           # self.create_derivation(act_id, e_out_identifier)
-                    entities_out[i][j]=e_out
+                        # self.create_derivation(act_id, e_out_identifier)
+                    entities_out[i][j] = e_out
         else:
             print('wrong axis')
         self.create_relation(act_id, generated, used, invalidated)
@@ -1042,14 +1264,17 @@ class Provenance:
 
         return self
 
-    def prov_join_multiprocess(self,process_num, start, stop, indexes_out, df_out,indexes_of_on_column, filler, list_columns, list_second_columns, values_right, values_left,values, columns_out, on, column_second_df, entities_in, entities_out, entities_in_second_df,queue):
-        generated=[]
-        invalidated=[]
-        used=[]
+    def prov_join_multiprocess(self, process_num, start, stop, indexes_out, df_out, indexes_of_on_column, filler,
+                               list_columns, list_second_columns, values_right, values_left, values, columns_out, on,
+                               column_second_df, entities_in, entities_out, entities_in_second_df, queue):
+        generated = []
+        invalidated = []
+        used = []
         for i in range(start, stop):
             if i % 1000 == 0:
                 print(i)
-            if i<df_out.shape[0]:
+            if i < df_out.shape[0]:
+                t=time.time()
                 # verifico se chiave/i esistono in tutti e 2 i df, se in uno non ci sta ai nan gli metto solo generation
                 # prendo la porzione di riga con le colonne di un df alla volta e creo le relazioni
                 # per creare le relazioni devo prima trovare gli indici dei valori nei df originali
@@ -1064,6 +1289,7 @@ class Provenance:
                 # search all rows in starting df with the on keys
                 row_left = 0
                 row_right = 0
+                t=time.time()
                 for index, value in row_out_on_values.items():
 
                     index_left = list_columns.index(index)
@@ -1082,11 +1308,13 @@ class Provenance:
                         row_left = row_left[
                             (row_left[:, index_left] == value)]
                     # ora
+
                 if row_right.size == 0:
                     in_right = False
                 if row_left.size == 0:
                     in_left = False
                 if in_left:
+                    t=time.time()
                     # search for the right row to create the provenance
                     left_col_list = list(self.current_columns)
                     out_col_left = list(columns_out)
@@ -1120,6 +1348,7 @@ class Provenance:
                     index_index = np.where(np.all(values_left == row_left, axis=1))[0][0]
                     # index_index=self.df[self.df==row_left].index[0]
                     for z in range(len(columns_out)):
+                        t=time.time()
                         col_name = columns_out[z]
                         # saerch the index of the left df to create provenance
                         if col_name.endswith('_x') and col_name[:-2] in self.current_columns:
@@ -1248,9 +1477,295 @@ class Provenance:
                             generated.append(e_out_identifier)
                             entities_out[i][z] = e_out
                             # self.create_derivation(act_id, e_out_identifier)
-        queue.put((process_num, start, stop, entities_out[start:stop], current_derivations, new_entities, generated, used, invalidated))
+        queue.put((process_num, start, stop, entities_out[start:stop], current_derivations, new_entities, generated,
+                   used, invalidated))
+    def prov_join_hash_multiprocess(self, process_num, start, stop, indexes_out, df_out, indexes_of_on_column, filler,
+                               list_columns, list_second_columns, values, columns_out, on,
+                               column_second_df, entities_in, entities_out, entities_in_second_df,left_hash_table,
+                                    right_hash_table,index_left_columns_in_out_df,index_right_columns_in_out_df,hash_df_out_left,hash_df_out_right,columns_mapping_left,columns_mapping_right, queue):
+        generated = []
+        invalidated = []
+        used = []
+
+        for i in range(start, stop):
+            #if i % 1000 == 0:
+               #print(i)
+            if i < df_out.shape[0]:
+                in_left = False
+                in_right = False
+                record_id = str(uuid.uuid4())
+                hash_left=hash_df_out_left[i]
+                hash_right=hash_df_out_right[i]
+                key_identifier=dict()
+                if hash_left in left_hash_table:
+                    in_left=True
+                    index_left=left_hash_table[hash_left]
+                if hash_right in right_hash_table:
+                    in_right=True
+                    index_right=right_hash_table[hash_right]
+                for w in range(len(columns_out)):
+                    if w in columns_mapping_left:
+                        if in_left:
+                            if w in indexes_of_on_column and w not in key_identifier:
+                                if pd.isna(values[i, w]):
+                                    value='nan'
+                                else:
+                                    value = str(values[i, w])
+                                e_out = self.create_entity(record_id, value, columns_out[w], indexes_out[i],
+                                                           self.operation_number)
+                                e_out_identifier = e_out['id']
+                                key_identifier[w] = (e_out_identifier, e_out)
+                                e_in = entities_in[index_left][columns_mapping_left[w]]
+                                e_in_identifier = e_in['id']
+                                generated.append(e_out_identifier)
+                                # invalidated.append(e_in_identifier)
+                            elif w in indexes_of_on_column:
+                                e_in = entities_in[index_left][columns_mapping_left[w]]
+                                e_in_identifier = e_in['id']
+                                e_out_identifier = key_identifier[w][0]
+                                e_out = key_identifier[w][1]
+                            else:
+                                value = str(values[i, w])
+                                e_out = self.create_entity(record_id, value, columns_out[w], indexes_out[i],
+                                                           self.operation_number)
+                                e_out_identifier = e_out['id']
+                                e_in = entities_in[index_left][columns_mapping_left[w]]
+                                e_in_identifier = e_in['id']
+                                generated.append(e_out_identifier)
+                            self.create_derivation(e_in_identifier, e_out_identifier)
+                            used.append(e_in_identifier)
+                            entities_out[i][w] = e_out
+                        elif w not in indexes_of_on_column: #nan outer join
+                            value = str(values[i, w])
+                            e_out = self.create_entity(record_id, value, columns_out[w], indexes_out[i],
+                                                       self.operation_number)
+                            e_out_identifier = e_out['id']
+                            generated.append(e_out_identifier)
+                            entities_out[i][w] = e_out
+                    if w in columns_mapping_right:
+                        if in_right:
+                            if w in indexes_of_on_column and w not in key_identifier:
+                                value = str(values[i, w])
+                                e_out = self.create_entity(record_id, value, columns_out[w], indexes_out[i],
+                                                           self.operation_number)
+                                e_out_identifier = e_out['id']
+                                key_identifier[w] = (e_out_identifier, e_out)
+                                e_in = entities_in_second_df[index_right][columns_mapping_right[w]]
+                                e_in_identifier = e_in['id']
+                                generated.append(e_out_identifier)
+                                #invalidated.append(e_in_identifier)
+
+                            elif w in indexes_of_on_column:
+                                e_in = entities_in_second_df[index_right][columns_mapping_right[w]]
+                                e_in_identifier = e_in['id']
+                                e_out_identifier=key_identifier[w][0]
+                                e_out=key_identifier[w][1]
+                            else:
+                                value = str(values[i, w])
+                                e_out = self.create_entity(record_id, value, columns_out[w], indexes_out[i],
+                                                           self.operation_number)
+                                e_out_identifier = e_out['id']
+                                e_in = entities_in_second_df[index_right][columns_mapping_right[w]]
+                                e_in_identifier = e_in['id']
+                                generated.append(e_out_identifier)
+
+                            self.create_derivation(e_in_identifier, e_out_identifier)
+                            used.append(e_in_identifier)
+
+                            entities_out[i][w] = e_out
+                        elif w not in indexes_of_on_column:
+                            value = str(values[i, w])
+                            e_out = self.create_entity(record_id, value, columns_out[w], indexes_out[i],
+                                                       self.operation_number)
+                            e_out_identifier = e_out['id']
+                            generated.append(e_out_identifier)
+                            entities_out[i][w] = e_out
+        used=list(set(used))#delete duplicates
+        queue.put((process_num, start, stop, entities_out[start:stop], current_derivations, new_entities, generated,
+                   used, invalidated))
 
 
+    @timing
+    def prov_join_hash(self, df_out, on, description=None):
+        """Return provenance document related to join function.
+
+                     Keyword argument:
+                     df_out -- the output dataframe
+                     on -- list of columns to join on or single column
+
+                     """
+        t=time.time()
+        # funziona con nan su colonne diverse da on
+        function_name = 'Join'
+        self.initialize()
+        global new_entities
+        new_entities = []
+        global current_relation
+        current_relation = []
+        global current_derivations
+        current_derivations = []
+        # Get current values:
+        entities_in = self.current_ent
+        entities_in_second_df = self.current_second_ent
+        column_second_df = self.second_df.columns
+        index_second_df = self.second_df.index
+        columns_mapping_left=dict()
+        columns_mapping_right=dict()
+
+        # print(on)
+        if type(on) != list:
+            on = [on]
+        # print(on)
+        list_columns = list(self.current_columns)
+        list_second_columns = list(column_second_df)
+        used_features = list(set(list_columns + list_second_columns))
+        # Output values:
+        columns_out = df_out.columns
+        indexes_out = df_out.index
+        list_col_out=list(columns_out)
+        filler = 'nan'
+        #values = df_out.fillna(filler).values
+        values=df_out.values
+        #df_filled= self.df.fillna(filler)
+        #second_df_filled= self.second_df.fillna(filler)
+        #print(second_df_filled.dtypes)
+        #print(self.second_df.dtypes)
+        #hash_df = pd.util.hash_pandas_object(df_filled, index=False,hash_key='0123456789123456')
+        #hash_second_df = pd.util.hash_pandas_object(second_df_filled, index=False,hash_key='0123456789123456')
+        # check dtype, dtype of column must be equal or hashing will fail. Impute nan values with nan string change dtypes
+        for i,col_name in enumerate(list_col_out):
+
+            if col_name[-2:] == '_x' and col_name[:-2] in list_columns:
+                if self.df[col_name[:-2]].dtype != df_out[col_name].dtype:
+                    self.df[col_name[:-2]] = self.df[col_name[:-2]].astype(df_out[col_name].dtype)
+
+            if col_name in list_columns:
+                self.df[col_name] = self.df[col_name].astype(df_out[col_name].dtype)
+
+            if col_name in column_second_df:
+                self.second_df[col_name] = self.second_df[col_name].astype(df_out[col_name].dtype)
+
+
+            if col_name[-2:] == '_y' and col_name[:-2] in column_second_df:
+                self.second_df[col_name[:-2]] = self.second_df[col_name[:-2]].astype(df_out[col_name].dtype)
+
+        hash_df = pd.util.hash_pandas_object(self.df, index=False,hash_key='0123456789123456')
+        hash_second_df = pd.util.hash_pandas_object(self.second_df, index=False, hash_key='0123456789123456')
+
+        left_hash_table = pd.Series(hash_df.index.values, index=hash_df)
+        right_hash_table = pd.Series(hash_second_df.index.values, index=hash_second_df)
+        act_id = self.create_activity(function_name, features_name=used_features, description=description)
+        entities_out = np.empty(df_out.shape, dtype=object)
+        indexes_of_on_column = []
+        generated = []
+        used = []
+        invalidated = []
+        for col in on:
+            on_col_index = df_out.columns.get_loc(col)
+            indexes_of_on_column.append(on_col_index)
+        #print(indexes_of_on_column)
+
+        index_left_columns_in_out_df=[]
+        index_right_columns_in_out_df=[]
+        duplicate_names=False
+        for i,col_name in enumerate(list_col_out):
+
+            if col_name[-2:] == '_x' and col_name[:-2] in list_columns:
+                duplicate_names=True
+                index_left_columns_in_out_df.append(i)
+                columns_mapping_left[i] = list_columns.index(col_name[:-2])
+
+            if col_name in list_columns:
+                index_left_columns_in_out_df.append(i)
+                columns_mapping_left[i] = list_columns.index(col_name)
+
+            if col_name in column_second_df:
+                index_right_columns_in_out_df.append(i)
+                columns_mapping_right[i]=list_second_columns.index(col_name)
+
+            if col_name[-2:] == '_y' and col_name[:-2] in column_second_df:
+                duplicate_names=True
+                index_right_columns_in_out_df.append(i)
+                columns_mapping_right[i] = list_second_columns.index(col_name[:-2])
+
+        df_out_left=df_out.iloc[:,index_left_columns_in_out_df]
+        df_out_right=df_out.iloc[:,index_right_columns_in_out_df]
+        #print(columns_mapping_left,columns_mapping_right)
+
+        if duplicate_names:
+            df_out_left.columns = [x[:-2] if x[-2:] == '_x' else x for x in df_out_left.columns]
+            df_out_right.columns = [x[:-2] if x[-2:] == '_y' else x for x in df_out_right.columns]
+
+        #sort columns
+        #df_out_left=df_out_left[list_columns].fillna(filler)
+        #df_out_right=df_out_right[column_second_df].fillna(filler)
+        df_out_left = df_out_left[list_columns]
+        df_out_right = df_out_right[column_second_df]
+        #pd.set_option('display.max_columns', None)
+        #hash output parts
+        hash_df_out_left=pd.util.hash_pandas_object(df_out_left, index=False, hash_key='0123456789123456').values
+        hash_df_out_right=pd.util.hash_pandas_object(df_out_right, index=False, hash_key='0123456789123456').values
+        #print(self.second_df)
+        #print(df_out_right)
+        #print(pd.util.hash_pandas_object(df_out_right, index=False, hash_key='0123456789123456'))
+        cpu_num = os.cpu_count()
+        process_list = []
+        process_num = 0
+        queue = Queue()
+        m = df_out.shape[0]
+        print(time.time()-t)
+
+        if m / self.CHUNK_INDEX_SIZE > cpu_num:
+            chunk_size = int(m / cpu_num)
+            for i in range(0, m, chunk_size):
+                print(i, m)
+                process_num += 1
+                p = Process(target=self.prov_join_hash_multiprocess, args=(
+                    process_num, i, i + chunk_size, indexes_out, df_out, indexes_of_on_column, filler, list_columns,
+                    list_second_columns,  values, columns_out, on, column_second_df,
+                    entities_in, entities_out, entities_in_second_df,left_hash_table,
+                    right_hash_table,index_left_columns_in_out_df,index_right_columns_in_out_df,hash_df_out_left,hash_df_out_right,columns_mapping_left,columns_mapping_right, queue))
+                process_list.append(p)
+        else:
+            for i in range(0, m, self.CHUNK_INDEX_SIZE):
+                process_num += 1
+                p = Process(target=self.prov_join_hash_multiprocess, args=(
+                    process_num, i, i + self.CHUNK_INDEX_SIZE, indexes_out, df_out, indexes_of_on_column, filler,
+                    list_columns, list_second_columns, values, columns_out, on,
+                    column_second_df, entities_in, entities_out, entities_in_second_df,left_hash_table,right_hash_table,
+                    index_left_columns_in_out_df,index_right_columns_in_out_df,hash_df_out_left,hash_df_out_right,columns_mapping_left,columns_mapping_right, queue))
+                process_list.append(p)
+        for process in process_list:
+            process.start()
+        results = [queue.get() for p in process_list]
+        for process in process_list:
+            process.join()
+        results.sort(key=lambda tup: tup[0])
+        for part in results:
+            start = part[1]
+            stop = part[2]
+            entities_out[start:stop, :] = part[3]
+            self.current_derivations = self.current_derivations + part[4]
+            self.new_entities = self.new_entities + part[5]
+            generated = generated + part[6]
+            used = used + part[7]
+            invalidated = invalidated + part[8]
+        print(len(self.current_derivations))
+        print(f'scanned:{time.time()-t}')
+        print('creo relazione')
+        self.create_relation(act_id, generated, used, invalidated)
+        print(f'created relation:{time.time()-t}')
+        # Save provenance document in json file:
+        print('salvataggio')
+        self.save_json_prov(os.path.join(self.results_path, self.instance))
+        print(f'saved:{time.time()-t}')
+        # Update current values:
+        print('setting')
+        self.set_current_values(df_out, entities_out)
+        print(f'setted:{time.time()-t}')
+        # print(entities_out)
+
+        return self
     @timing
     def get_prov_join(self, df_out, on, description=None):
         """Return provenance document related to join function.
@@ -1302,20 +1817,24 @@ class Provenance:
         process_list = []
         process_num = 0
         queue = Queue()
-        m=df_out.shape[0]
+        m = df_out.shape[0]
         if m / self.CHUNK_INDEX_SIZE > cpu_num:
             chunk_size = int(m / cpu_num)
             for i in range(0, m, chunk_size):
                 print(i, m)
                 process_num += 1
                 p = Process(target=self.prov_join_multiprocess, args=(
-                    process_num, i, i + chunk_size, indexes_out, df_out,indexes_of_on_column, filler, list_columns, list_second_columns, values_right, values_left,values, columns_out, on, column_second_df, entities_in, entities_out, entities_in_second_df, queue))
+                    process_num, i, i + chunk_size, indexes_out, df_out, indexes_of_on_column, filler, list_columns,
+                    list_second_columns, values_right, values_left, values, columns_out, on, column_second_df,
+                    entities_in, entities_out, entities_in_second_df, queue))
                 process_list.append(p)
         else:
             for i in range(0, m, self.CHUNK_INDEX_SIZE):
                 process_num += 1
                 p = Process(target=self.prov_join_multiprocess, args=(
-                    process_num, i, i + self.CHUNK_INDEX_SIZE, indexes_out, df_out,indexes_of_on_column, filler, list_columns, list_second_columns, values_right, values_left,values, columns_out, on, column_second_df, entities_in, entities_out, entities_in_second_df, queue))
+                    process_num, i, i + self.CHUNK_INDEX_SIZE, indexes_out, df_out, indexes_of_on_column, filler,
+                    list_columns, list_second_columns, values_right, values_left, values, columns_out, on,
+                    column_second_df, entities_in, entities_out, entities_in_second_df, queue))
                 process_list.append(p)
         for process in process_list:
             process.start()
@@ -1377,7 +1896,6 @@ class Provenance:
         values_left = self.df.fillna(filler).values
         values_right = self.second_df.fillna(filler).values
 
-
         act_id = self.create_activity(function_name, features_name=used_features, description=description)
         entities_out = np.empty(df_out.shape, dtype=object)
         indexes_of_on_column = []
@@ -1421,20 +1939,20 @@ class Provenance:
             for index, value in row_out_on_values.items():
 
                 index_left = list_columns.index(index)
-                index_right=list_second_columns.index(index)
+                index_right = list_second_columns.index(index)
                 if type(row_right) == int:
                     row_right = values_right[
-                        (values_right[:, index_right] == value) ]
+                        (values_right[:, index_right] == value)]
                 else:
                     row_right = row_right[
-                        (row_right[:, index_right] == value) ]
+                        (row_right[:, index_right] == value)]
 
                 if type(row_left) == int:
                     row_left = values_left[
-                        (values_left[:, index_left] == value) ]
+                        (values_left[:, index_left] == value)]
                 else:
                     row_left = row_left[
-                        (row_left[:, index_left] == value) ]
+                        (row_left[:, index_left] == value)]
                 # ora
             if row_right.size == 0:
                 in_right = False
@@ -1467,7 +1985,7 @@ class Provenance:
                     index_col_name = list_columns.index(col_name)
                     # print(row_out[out_col_left[j]])
                     # row_left = row_left[(row_left[col_name] == row_out[out_col_left[j]]) | (pd.isna(row_left[col_name]) & pd.isna(row_out[out_col_left[j]]))]
-                    row_left = row_left[(row_left[:, index_col_name] == row_out[out_col_left[j]]) ]
+                    row_left = row_left[(row_left[:, index_col_name] == row_out[out_col_left[j]])]
 
                 if len(row_left) > 1:
                     row_left = row_left[0]
@@ -1544,7 +2062,7 @@ class Provenance:
                     index_col_name = list_second_columns.index(col_name)
                     # print(row_out[out_col_right[j]],type(row_out[out_col_right[j]]),pd.isna(row_out[out_col_right[j]]))
                     # row_right = row_right[(row_right[col_name] == row_out[out_col_right[j]]) | (pd.isna(row_right[col_name]) & pd.isna(row_out[out_col_right[j]]))]
-                    row_right = row_right[(row_right[:, index_col_name] == row_out[out_col_right[j]]) ]
+                    row_right = row_right[(row_right[:, index_col_name] == row_out[out_col_right[j]])]
                 index_index = np.where(np.all(values_right == row_right, axis=1))[0][0]
                 for w in range(len(columns_out)):
 
@@ -1570,7 +2088,7 @@ class Provenance:
                             e_out = self.create_entity(record_id, value, columns_out[w], indexes_out[i],
                                                        self.operation_number)
                             e_out_identifier = e_out['id']
-                        #col_index = row_right.columns.get_loc(col_name)
+                        # col_index = row_right.columns.get_loc(col_name)
                         col_index = list_second_columns.index(col_name)
 
                         # index_index = index_second_df.get_loc(row_right.index.values[0])
@@ -1611,7 +2129,7 @@ class Provenance:
 
         return self
 
-    def checkpoint(self,df_out,columns_to_check, description=None):
+    def checkpoint(self, df_out, columns_to_check, description=None):
 
         """Return provenance document related to features trasformation function.
 
@@ -1655,6 +2173,8 @@ class Provenance:
         self.save_json_prov(os.path.join(self.results_path, self.instance))
 
         return self
+
+
 def get_size_format(b, factor=1024, suffix='B'):
     for unit in ['', 'K', 'M', 'G', 'T', 'P', 'E', 'Z']:
         if b < 1024:
