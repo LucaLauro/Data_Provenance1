@@ -98,5 +98,7 @@ def main():
     tracker.df = tracker.df.drop(['B'], axis=1)
     print(tracker.df)
     run('demo',savepath)
-main()
+    
+if __name__=='__main__':
+    main()
 
