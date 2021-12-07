@@ -65,11 +65,13 @@ def main(dbname):
     tracker.df['key2'] = tracker.df['key2']*2
     # Imputation 2
     tracker.df = tracker.df.fillna('imputato')
+    # One hot encoding
     c='D'
     dummies = []
     dummies.append(pd.get_dummies(tracker.df[c]))
     df_dummies = pd.concat(dummies, axis=1)
     tracker.df = pd.concat((tracker.df, df_dummies), axis=1)
+    # sto space transformation explicitiing the derivation column(automatic if D was dropped)
     tracker.stop_space_prov('D')
     print(tracker.df)
     run(dbname,savepath)
