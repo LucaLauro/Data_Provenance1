@@ -1,0 +1,34 @@
+#all transformation 0.017s
+MATCH (a:Activity)
+RETURN a
+# why provenance 0.015s
+MATCH (e:Entity{EntityId:"K0^^key1^^5^^7"})-[r:WAS_DERIVED_FROM]->(m:Entity) return e,m,r
+#how provenance 0.015s
+MATCH (e:Entity{EntityId:"K0^^key1^^5^^7"})-[r:WAS_DERIVED_FROM]->(m:Entity) match (m:Entity)-[]-(a:Activity) return e,m,r,a
+#feature operation 0.015s
+match (a:Activity)
+where 'key1' IN a.used_features
+return a
+#record operation 0.047s
+MATCH (e:Entity {record_id: 'a1fac6b2-642c-48c0-97fc-7e8df4a4a73c'})-[r]-(a:Activity)
+RETURN e,r,a
+#item operation 0.018s
+MATCH (e:Entity{EntityId:"K0^^key1^^5^^7"})-[]-(a:Activity)  return e,a
+#invalidations? 89s
+MATCH (e:Entity)-[:WAS_INVALIDATED_BY]->(a:Activity)
+return e,a
+#feature invalidation 0.013s
+match  (a:Activity)
+where 'B' IN a.used_features and a.deleted_used_features=True
+return a
+#record invalidation 0.018s
+MATCH (e:Entity{record_id:"b1c532a0-641f-4e7a-a0a0-4368c12f073f"})-[:WAS_INVALIDATED_BY]-(a:Activity)
+where  a.deleted_records=True
+return a
+#item invalidation 0.012
+MATCH (e:Entity{EntityId:"K0^^key1^^5^^7"})-[:WAS_INVALIDATED_BY]->(a:Activity)  return e,a
+#record history? 0.2(se metto il verso) 6s se non lo metto
+match (e:Entity {record_id:"74b2b6ec-33a5-45e7-81da-389d978556a4"})-[r:WAS_DERIVED_FROM*0..]-(m:Entity) match (m:Entity)-[]-(a:Activity)  return e,r,m,a
+
+#item history 0.015
+match (e:Entity {EntityId:"K0^^key1^^0^^12"})-[r:WAS_DERIVED_FROM*0..]-(m:Entity) match (m:Entity)-[]-(a:Activity)  return e,r,m,a

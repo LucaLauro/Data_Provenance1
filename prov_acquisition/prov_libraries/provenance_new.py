@@ -24,7 +24,7 @@ class Provenance:
     INPUT = 'input'
     OUTPUT = 'output'
     LIST_REL_SIZE = 25000
-    CHUNK_SIZE = 100000
+    CHUNK_SIZE = 300000
     CHUNK_INDEX_SIZE = 1000
     # PROV-N objects
     ENTITY = 'prov:entity'
@@ -49,6 +49,7 @@ class Provenance:
         # Inizialize provenance activities, relations and new entities
         self.current_act = []
         self.current_relations = []
+        self.dataset_level_data=dict()
         self.new_entities = []
         self.current_derivations = []
         # Initialize operation number:
@@ -125,7 +126,7 @@ class Provenance:
         return ent
 
     def create_activity(self, function_name, features_name=None, description=None, other_attributes=None,
-                        generated_features=None, deleted_used_features=None, deleted_records=None):
+                        generated_features=None, deleted_used_features=None, deleted_records=None,code=None,code_line=None):
         """Create a provenance activity and add to the current activities array.
         Return the id of the new prov activity."""
         # Get default activity attributes:
@@ -141,8 +142,11 @@ class Provenance:
             attributes['deleted_used_features'] = deleted_used_features
         if deleted_records is not None:
             attributes['deleted_records'] = deleted_records
+        if code is not None:
+            attributes['code'] = code
+        if code_line is not None:
+            attributes['code_line'] = code_line
         attributes['operation_number'] = str(self.operation_number)
-
         # Join default and extra attributes:
         if other_attributes is not None:
             attributes.update(other_attributes)
@@ -158,12 +162,14 @@ class Provenance:
         act_id = self.NAMESPACE_FUNC + str(uuid.uuid4())
 
         # Add activity to current provenance document:
-        act = {'identifier': act_id, 'attributes': attributes}
-        self.current_act.append(act)
+        attributes['identifier'] = act_id
+
+        #act = {'identifier': act_id, 'attributes': attributes}
+        self.current_act.append(attributes)
 
         return act_id
 
-    def create_relation(self, act_id, generated=None, used=None, invalidated=None):
+    def create_relation_old(self, act_id, generated=None, used=None, invalidated=None):
         """Add a relation to the current relations array.
         Return the new relation."""
         if generated is None:
@@ -201,6 +207,18 @@ class Provenance:
             self.current_relations.append(relation)
             current_relation.append(relation)
 
+    def create_relation(self, act_id, generated=None, used=None, invalidated=None):
+        """Add a relation to the current relations array.
+                Return the new relation."""
+        if generated is None:
+            generated = []
+        if used is None:
+            used = []
+        if invalidated is None:
+            invalidated = []
+        self.current_relations.append((generated,used,invalidated,act_id))
+        current_relation.append((generated,used,invalidated,act_id))
+
     def create_derivation(self, used_ent, gen_ent):
         """
         Add a derivation to the current relations array.
@@ -213,11 +231,11 @@ class Provenance:
         """
             save entities json
         """
-        output_name = ents_path + '.json' if ind // self.CHUNK_SIZE == 0 else ents_path + '_' + str(
-            ind // self.CHUNK_SIZE) + '.json'
-        with open(output_name, 'w', encoding='utf-8') as ents_file:
-            ents = entities[ind:ind + self.CHUNK_SIZE]
-            json.dump(ents, ents_file, ensure_ascii=False, indent=4)
+        output_name = ents_path + '.csv' if ind // self.CHUNK_SIZE == 0 else ents_path + '_' + str(
+            ind // self.CHUNK_SIZE) + '.csv'
+        ents = entities[ind:ind + self.CHUNK_SIZE]
+        df_ents=pd.DataFrame.from_dict(ents)
+        df_ents.to_csv(output_name,index=False,encoding='utf-8')
 
     def save_entities_db_multiproc(self, entities, ind):
         client = pymongo.MongoClient('localhost', 27017, connect=False)  # cancella e ricrea collection dashboard
@@ -253,17 +271,17 @@ class Provenance:
         self.db = client[self.dbname]
         deriv = self.current_derivations[ind:ind + self.CHUNK_SIZE]
         self.db.derivations.insert_many(deriv)
-        client.close
+        client.close()
 
     def save_deriv_multiproc1(self, deriv_path, ind):
         """
             save derivations json
         """
-        output_name = deriv_path + '.json' if ind // self.CHUNK_SIZE == 0 else deriv_path + '_' + str(
-            ind // self.CHUNK_SIZE) + '.json'
-        with open(output_name, 'w', encoding='utf-8') as deriv_file:
-            deriv = self.current_derivations[ind:ind + self.CHUNK_SIZE]
-            json.dump(deriv, deriv_file, ensure_ascii=False, indent=4)
+        output_name = deriv_path + '.csv' if ind // self.CHUNK_SIZE == 0 else deriv_path + '_' + str(
+            ind // self.CHUNK_SIZE) + '.csv'
+        deriv = self.current_derivations[ind:ind + self.CHUNK_SIZE]
+        df_deriv = pd.DataFrame.from_dict(deriv)
+        df_deriv.to_csv(output_name, index=False, encoding='utf-8')
 
     def save_deriv_multiproc(self, deriv_path):
         """
@@ -317,9 +335,13 @@ class Provenance:
                 # Add entity to current provenance document:
                 entities[i][j] = self.create_entity(record_id, value, columns[j], indexes[i],
                                                     self.operation_number)
+        #crea dataset data
+        #crea per ogni feature un nodo con un id e informazioni della feature
 
         # Save input entities in json files
         self.save_entities_multiproc(self.new_entities, ents_path)
+
+        #salva in file diversi dataset e feature data
 
         return entities
 
@@ -350,35 +372,65 @@ class Provenance:
         self.db.relations.insert_many(rels)
         client.close()
 
-    def save_rel_multiproc1(self, rel_path, j):
+    def save_rel_multiproc1(self, rel_path, ind,rel_type,act_id,i):
         """
             save relations json
         """
-        output_name = rel_path + '.json' if j // 3 == 0 else rel_path + '_' + str(
-            j // 3) + '.json'
-        with open(output_name, 'w', encoding='utf-8') as rel_file:
-            rels = self.current_relations[j:j + 3]
-            json.dump(rels, rel_file, ensure_ascii=False, indent=4)
+        rel_path = os.path.join(rel_path, rel_type)
+        output_name = rel_path +'_'+ act_id+'.csv' if ind // self.CHUNK_SIZE == 0 else rel_path +'_' + str(
+            ind // self.CHUNK_SIZE)+'_'+act_id + '.csv'
+        deriv_index=0
+        if rel_type=='used':
+            deriv_index=1
+        if rel_type=='invalidated':
+            deriv_index=2
+
+        rels = self.current_relations[i][deriv_index][ind:ind + self.CHUNK_SIZE]
+        df_rels = pd.DataFrame.from_dict(rels)
+        df_rels.to_csv(output_name, index=False, encoding='utf-8',header=False)
 
     def save_rel_multiproc(self, rel_path):
         """split the derivations list in n list of chunck size lenght and launch a process for each"""
-        process_list1 = []
-        for j in range(0, len(self.current_relations), 3):
-            p_rel = Process(target=self.save_rel_multiproc1, args=(rel_path, j,))
-            # p_rel = Process(target=self.save_rel_db_multiproc, args=(j,))
+        i=0
+        process_list = []
+        for rel in self.current_relations:
+            print(len(self.current_relations))
+            generated=rel[0]
+            used=rel[1]
+            invalidated=rel[2]
+            act_id=rel[3]
+            print(act_id)
+            max_length = max(len(generated), len(used), len(invalidated))
+            #print(f'{len(used),len(generated)}')
+            for ind in range(0, max_length, self.CHUNK_SIZE):
+                if len(generated)>ind:
+                    #print(ind)
+                    p = Process(target=self.save_rel_multiproc1, args=(rel_path, ind,'generated',act_id,i))
+                    process_list.append(p)
+                if len(used) > ind:
+                    p = Process(target=self.save_rel_multiproc1, args=(rel_path, ind, 'used',act_id,i))
+                    process_list.append(p)
+                if len(invalidated) > ind:
+                    p = Process(target=self.save_rel_multiproc1, args=(rel_path, ind, 'invalidated',act_id,i))
+                    process_list.append(p)
+            i=i+1
+            # p = Process(target=self.save_deriv_db_multiproc, args=(ind,))
 
-            process_list1.append(p_rel)
+            #process_list.append(p)
         cpu_num = os.cpu_count()
-        num_proc_run1 = 0
-        index_proc1 = 0
-        for proc in process_list1:
-            if num_proc_run1 == cpu_num:
-                num_proc_run1 = 0
-                for process_running1 in process_list1[index_proc1:index_proc1 + cpu_num]:
-                    process_running1.join()
-                index_proc1 += cpu_num
-            num_proc_run1 += 1
-            proc.start()
+        num_proc_run = 0
+        index_proc = 0
+        for p in process_list:
+            if num_proc_run == cpu_num:
+                num_proc_run = 0
+                for process_running in process_list[index_proc:index_proc + cpu_num]:
+                    process_running.join()
+                index_proc += cpu_num
+            num_proc_run += 1
+            p.start()
+        #forse non serve
+        for p in process_list:
+            p.join()
 
     def save_json_prov(self, nameFile):
         """Save provenance in json file."""
@@ -389,7 +441,7 @@ class Provenance:
         acts_path = os.path.join(nameFile, 'activities.json')
         rel_path = os.path.join(nameFile, 'relations')
         deriv_path = os.path.join(nameFile, 'derivations')
-
+        rel_path=nameFile
         # Save entities:
         # entities = list(self.current_ent.flatten())
         entities = self.new_entities
@@ -431,12 +483,28 @@ class Provenance:
         self.current_second_ent = self.create_prov_entities(second_dataframe, self.INPUT)
         print('created second df entity')
 
+    def get_dataset_level_data(self, df):
+        dataset_level_data=dict()
+        dataset_level_data['shape']=df.shape
+        dataset_level_data['columns_name']=list(df.columns)
+        types = df.dtypes.to_dict()
+        dataset_level_data['types'] = {k: v.name for k, v in types.items()}
+        missing_perc=df.isnull().sum() * 100 / len(df)
+        dataset_level_data['missing_percentage']=missing_perc.to_dict()
+        return dataset_level_data
+
+    def get_feature_level_data(self,df,feature):
+        feature_level_data=dict()
+        feature_level_data['describe']=df[feature].describe().to_dict()
+        feature_level_data['distinct']=list(df[feature].unique())
+        feature_level_data['distribution']=df[feature].value_counts()
+
     ###
     ###  PROVENANCE METHODS
     ###
 
     @timing
-    def get_prov_feature_transformation(self, df_out, columnsName, description=None):
+    def get_prov_feature_transformation(self, df_out, columnsName,code,code_line, description=None):
         """Return provenance document related to features trasformation function.
 
         Keyword argument:
@@ -452,9 +520,8 @@ class Provenance:
         columns_out = df_out.columns
         indexes_out = df_out.index
         values = df_out.values
-        print(entities_in[1])
         for col_name in columnsName:
-            act_id = self.create_activity(function_name, col_name, description)
+            act_id = self.create_activity(function_name, col_name,code=code,code_line=code_line,description=description)
             col_index = columns_out.get_loc(col_name)
             generated = []
             used = []
@@ -515,7 +582,7 @@ class Provenance:
                   new_entities, generated, used, invalidated))
 
     @timing
-    def get_prov_space_transformation(self, df_out, columnsName, shift_period, description):
+    def get_prov_space_transformation(self, df_out, columnsName, shift_period,code,code_line, description):
         """Return provenance document related to space trasformation function.
 
         Keyword argument:
@@ -558,7 +625,7 @@ class Provenance:
 
         generated_features = [col for col in columns_out if col not in columns_in]
         # Create space transformation activity:
-        act_id = self.create_activity(function_name, columnsName, description, generated_features=generated_features,
+        act_id = self.create_activity(function_name, columnsName, description,code=code,code_line=code_line, generated_features=generated_features,
                                       deleted_used_features=len(drop_columns) > 0)
 
         time_start = time.time()
@@ -688,7 +755,7 @@ class Provenance:
         return self
 
     @timing
-    def get_prov_dim_reduction_hash(self, df_out, description):
+    def get_prov_dim_reduction_hash(self, df_out,code,code_line, description):
         """Return provenance document related to selection or projection."""
         # Use this method!
         # works with reindex
@@ -731,9 +798,9 @@ class Provenance:
         # print(deleted_items, delIndex)
         # Create selection activity:
         if len(delIndex) > 0:
-            act_id = self.create_activity(function_name, list(columns_in), description, deleted_records=True)
+            act_id = self.create_activity(function_name, list(columns_in), description=description,code=code,code_line=code_line, deleted_records=True)
         elif len(delColumnsName) > 0:
-            act_id = self.create_activity(function_name, list(delColumnsName), description, deleted_used_features=True)
+            act_id = self.create_activity(function_name, list(delColumnsName), description=description,code=code,code_line=code_line, deleted_used_features=True)
         invalidated = []
         for i in delIndex:
             for j in range(n):
@@ -762,7 +829,7 @@ class Provenance:
         return self
 
     @timing
-    def get_prov_instance_generation(self, df_out, columnsName, description=None):
+    def get_prov_instance_generation(self, df_out, columnsName,code,code_line, description=None):
         """Return provenance document related to instance generation function."""
         # compatta tutto, ogni colonna di derivazione un attività
         function_name = 'Instance Generation'
@@ -799,7 +866,7 @@ class Provenance:
                 else:
                     used[col_name]=[ent_id]
         """
-        act_id_col_used = self.create_activity(function_name, columnsName, description)
+        act_id_col_used = self.create_activity(function_name, columnsName,code=code,code_line=code_line,description=description)
 
         for col_name in columnsName:
 
@@ -814,7 +881,7 @@ class Provenance:
         columnsName_out = set(columns_out) - set(columnsName)  # List of non selected columns
         if columnsName_out:
             # element not derivated from a column
-            defaultAct_id = self.create_activity(function_name, None, description)
+            defaultAct_id = self.create_activity(function_name, None,code=code,code_line=code_line, description=description)
         # works only if the new data is appended to the df
         # Provenance of new data
 
@@ -857,7 +924,7 @@ class Provenance:
         return self
 
     @timing
-    def get_prov_value_transformation(self, df_out, columnsName, description=None):
+    def get_prov_value_transformation(self, df_out, columnsName,code,code_line, description=None):
         """Return provenance document related to value transformation function.
         Used when a value inside the dataframe is replaced.
 
@@ -891,7 +958,7 @@ class Provenance:
                 if str(val_in) != str(value):
                     if add_act:
                         # Create value transformation activity:
-                        act_id = self.create_activity(function_name, col_name, description)
+                        act_id = self.create_activity(function_name, col_name,code=code,code_line=code_line,description=description)
                         add_act = False
                     # Create new entity with the new value
                     e_out = self.create_entity(record_id, value, col_name, indexes_out[i],
@@ -913,7 +980,7 @@ class Provenance:
         return self
 
     @timing
-    def get_prov_imputation(self, df_out, columnsName, description=None):
+    def get_prov_imputation(self, df_out, columnsName,code,code_line, description=None):
         """Return provenance document related to imputation function.
 
         Keyword argument:
@@ -930,7 +997,7 @@ class Provenance:
         values = df_out.values
         t = time.time()
         for col_name in columnsName:
-            act_id = self.create_activity(function_name, col_name, description)
+            act_id = self.create_activity(function_name, col_name,code=code,code_line=code_line,description=description)
             col_index = columns_out.get_loc(col_name)
             generated = []
             used = []
@@ -1066,7 +1133,7 @@ class Provenance:
         queue.put((process_num, start, stop, entities_out[start:stop], current_derivations, new_entities, generated,
                    used, invalidated))
     @timing
-    def get_prov_union(self, df_out, axis, description=None):
+    def get_prov_union(self, df_out, axis,code,code_line, description=None):
         """Return provenance document related to union function.
 
         Keyword argument:
@@ -1096,7 +1163,7 @@ class Provenance:
         indexes_out = df_out.index
         values = df_out.values
         entities_out = np.empty(df_out.shape, dtype=object)
-        act_id = self.create_activity(function_name, features_name=used_features, description=description)
+        act_id = self.create_activity(function_name, features_name=used_features, description=description,code=code,code_line=code_line)
         cpu_num = os.cpu_count()
         process_list = []
         process_num = 0
@@ -1586,7 +1653,7 @@ class Provenance:
 
 
     @timing
-    def prov_join_hash(self, df_out, on, description=None):
+    def prov_join_hash(self, df_out, on,code,code_line, description=None):
         """Return provenance document related to join function.
 
                      Keyword argument:
@@ -1654,7 +1721,7 @@ class Provenance:
 
         left_hash_table = pd.Series(hash_df.index.values, index=hash_df)
         right_hash_table = pd.Series(hash_second_df.index.values, index=hash_second_df)
-        act_id = self.create_activity(function_name, features_name=used_features, description=description)
+        act_id = self.create_activity(function_name, features_name=used_features,code=code,code_line=code_line, description=description)
         entities_out = np.empty(df_out.shape, dtype=object)
         indexes_of_on_column = []
         generated = []
@@ -1705,6 +1772,7 @@ class Provenance:
         #hash output parts
         hash_df_out_left=pd.util.hash_pandas_object(df_out_left, index=False, hash_key='0123456789123456').values
         hash_df_out_right=pd.util.hash_pandas_object(df_out_right, index=False, hash_key='0123456789123456').values
+        #print(hash_second_df)
         #print(self.second_df)
         #print(df_out_right)
         #print(pd.util.hash_pandas_object(df_out_right, index=False, hash_key='0123456789123456'))
@@ -1713,12 +1781,11 @@ class Provenance:
         process_num = 0
         queue = Queue()
         m = df_out.shape[0]
-        print(time.time()-t)
 
         if m / self.CHUNK_INDEX_SIZE > cpu_num:
             chunk_size = int(m / cpu_num)
             for i in range(0, m, chunk_size):
-                print(i, m)
+                #print(i, m)
                 process_num += 1
                 p = Process(target=self.prov_join_hash_multiprocess, args=(
                     process_num, i, i + chunk_size, indexes_out, df_out, indexes_of_on_column, filler, list_columns,
@@ -1751,18 +1818,18 @@ class Provenance:
             used = used + part[7]
             invalidated = invalidated + part[8]
         print(len(self.current_derivations))
-        print(f'scanned:{time.time()-t}')
+        print(f'scanned:{time.time() - t}')
         print('creo relazione')
         self.create_relation(act_id, generated, used, invalidated)
-        print(f'created relation:{time.time()-t}')
+        print(f'created relation:{time.time() - t}')
         # Save provenance document in json file:
         print('salvataggio')
         self.save_json_prov(os.path.join(self.results_path, self.instance))
-        print(f'saved:{time.time()-t}')
+        print(f'saved:{time.time() - t}')
         # Update current values:
         print('setting')
         self.set_current_values(df_out, entities_out)
-        print(f'setted:{time.time()-t}')
+        print(f'setted:{time.time() - t}')
         # print(entities_out)
 
         return self
@@ -2129,7 +2196,7 @@ class Provenance:
 
         return self
 
-    def checkpoint(self, df_out, columns_to_check, description=None):
+    def checkpoint(self, df_out, columns_to_check,code,code_line, description=None):
 
         """Return provenance document related to features trasformation function.
 
@@ -2146,7 +2213,7 @@ class Provenance:
         indexes_out = df_out.index
         values = df_out.values
         for col_name in columns_to_check:
-            act_id = self.create_activity(function_name, col_name, description)
+            act_id = self.create_activity(function_name, col_name,code=code,code_line=code_line,description=description)
             col_index = columns_out.get_loc(col_name)
             generated = []
             used = []
