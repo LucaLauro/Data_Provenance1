@@ -16,6 +16,7 @@ def item_history():
     if request.args['button']=='item':
         # get item_history
         json_edge, json_data = get_item_history(value, feature, index, activities, relations, derivations, entities)
+
         return render_template('index2.html', json_data=json_data, json_edge=json_edge)
     else:
         # get record_history

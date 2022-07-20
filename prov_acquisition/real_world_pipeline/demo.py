@@ -2,13 +2,13 @@
 import sys
 
 sys.path.append('../')
-from prov_acquisition.prov_libraries import provenance_new as pr
+from ..prov_libraries import provenance_new as pr
+from ..prov_libraries import ProvenanceTracker
 import pandas as pd
 import time
 import os
-from prov_acquisition.prov_libraries import ProvenanceTracker
 import numpy as np
-from run import run
+from ..run import run
 
 
 def main():

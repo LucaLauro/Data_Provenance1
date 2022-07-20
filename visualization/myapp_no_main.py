@@ -59,7 +59,7 @@ def item_history():
     if request.args['button']=='item':
         # get item_history
         #json_edge, json_data = get_item_history(value, feature, index, activities, relations, derivations, entities)
-        json_edge, json_data = get_item_history_neo4j(value, feature, index, activities, relations, derivations, entities)
+        json_edge, json_data = get_item_history_neo4j(value, feature, index)
 
         return render_template('index3.html', json_data=json_data, json_edge=json_edge)
     else:
@@ -68,6 +68,7 @@ def item_history():
         return render_template('index2.html', json_data=json_data, json_edge=json_edge)
 
 def main(dbname):
+    """
     client = pymongo.MongoClient('localhost', 27017)
     db = client[dbname]
     global entities
@@ -80,5 +81,6 @@ def main(dbname):
     derivations = db.derivations
     global dashboard
     dashboard= db.dashboard
-    app.run()
+    """
+    app.run(port=5002)
 

@@ -5,7 +5,7 @@ import os
 import time
 import json
 from multiprocessing import Process, Queue
-from run import run2
+from ..run import run2
 import pymongo
 from pandas.api.types import is_numeric_dtype
 # global variables for multiprocessing operations

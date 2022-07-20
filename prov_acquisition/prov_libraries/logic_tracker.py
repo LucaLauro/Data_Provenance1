@@ -4,7 +4,7 @@ def columns_list_difference(column_list1,column_list2):
     return list(set(column_list1.tolist())-set(column_list2.tolist()))
 
 
-def shape_change_provenance_tracking(prov_tracker_obj):
+def shape_change_provenance_tracking(prov_tracker_obj,code,code_line):
     old_df=prov_tracker_obj._copy_df
     new_df=prov_tracker_obj._df
     old_shape = old_df.shape
@@ -13,7 +13,7 @@ def shape_change_provenance_tracking(prov_tracker_obj):
     if new_shape[0] < old_shape[0] :
         #dim reduction, instance selection
         print('Instance drop detected')
-        prov_tracker_obj.provenance_obj=prov_tracker_obj.provenance_obj.get_prov_dim_reduction_hash(new_df,prov_tracker_obj.description)
+        prov_tracker_obj.provenance_obj=prov_tracker_obj.provenance_obj.get_prov_dim_reduction_hash(new_df,code,code_line,prov_tracker_obj.description)
         prov_tracker_obj.reset_description()
     if new_shape[1] < old_shape[1] :
         dropped_col = columns_list_difference(old_df.columns, new_df.columns)
@@ -22,14 +22,14 @@ def shape_change_provenance_tracking(prov_tracker_obj):
             print(f'Space transform detected, {dropped_col} generated the new column{prov_tracker_obj.col_add}.')
             print('Warning: Remember that the last dropped columns (last operation) are the columns linked to the space transform.'
                   ' If you want to use space transform without dropping columns use stop_space_prov([col_joined]) method indicating the column joined in the transformation')
-            prov_tracker_obj.provenance_obj=prov_tracker_obj.provenance_obj.get_prov_space_transformation(new_df,dropped_col,0,prov_tracker_obj.description)
+            prov_tracker_obj.provenance_obj=prov_tracker_obj.provenance_obj.get_prov_space_transformation(new_df,dropped_col,0,code,code_line,prov_tracker_obj.description)
             prov_tracker_obj.reset_description()
             prov_tracker_obj.col_add=[]
             return
 
         #dim reduction, feature selection/dropped column
         print(f'Column drop detected on {dropped_col}')
-        prov_tracker_obj.provenance_obj=prov_tracker_obj.provenance_obj.get_prov_dim_reduction_hash(new_df, prov_tracker_obj.description)
+        prov_tracker_obj.provenance_obj=prov_tracker_obj.provenance_obj.get_prov_dim_reduction_hash(new_df,code,code_line, prov_tracker_obj.description)
         prov_tracker_obj.reset_description()
 
 
@@ -40,7 +40,7 @@ def shape_change_provenance_tracking(prov_tracker_obj):
         if len(prov_tracker_obj.columns_used)>0:
             print(f'Instance generation detected, used columns: {prov_tracker_obj.columns_used}')
 
-            prov_tracker_obj.provenance_obj = prov_tracker_obj.provenance_obj.get_prov_instance_generation(new_df,prov_tracker_obj.columns_used,
+            prov_tracker_obj.provenance_obj = prov_tracker_obj.provenance_obj.get_prov_instance_generation(new_df,prov_tracker_obj.columns_used,code,code_line,
                                                                                                           prov_tracker_obj.description)
             prov_tracker_obj.reset_used_columns()
             prov_tracker_obj.reset_description()
@@ -48,7 +48,7 @@ def shape_change_provenance_tracking(prov_tracker_obj):
         else:
             print('Instance generation detected')
             prov_tracker_obj.provenance_obj = prov_tracker_obj.provenance_obj.get_prov_instance_generation(new_df,
-                                                                                                           prov_tracker_obj.columns_used,
+                                                                                                           prov_tracker_obj.columns_used,code,code_line,
                                                                                                            prov_tracker_obj.description)
             prov_tracker_obj.reset_description()
     if new_shape[1] > old_shape[1]:
@@ -63,7 +63,7 @@ def shape_change_provenance_tracking(prov_tracker_obj):
 
 
 
-def value_change_provenance_tracking(prov_tracker_obj):
+def value_change_provenance_tracking(prov_tracker_obj,code,code_line):
     old_df = prov_tracker_obj._copy_df
     new_df = prov_tracker_obj._df
     if (new_df.isna().values.sum()-old_df.isna().values.sum()) < 0:
@@ -76,7 +76,7 @@ def value_change_provenance_tracking(prov_tracker_obj):
                 #imputated column
                 imputed_col.append(col)
         print(f'Imputation detected in columns: {imputed_col}')
-        prov_tracker_obj.provenance_obj=prov_tracker_obj.provenance_obj.get_prov_imputation(new_df,imputed_col,prov_tracker_obj.description)
+        prov_tracker_obj.provenance_obj=prov_tracker_obj.provenance_obj.get_prov_imputation(new_df,imputed_col,code,code_line,prov_tracker_obj.description)
         prov_tracker_obj.reset_description()
         return
 
@@ -102,13 +102,13 @@ def value_change_provenance_tracking(prov_tracker_obj):
     if feature_change and len(changed_col)>0:
         #feature transform
         print(f'Feature change detected on {changed_col} columns')
-        prov_tracker_obj.provenance_obj=prov_tracker_obj.provenance_obj.get_prov_feature_transformation(new_df,changed_col, prov_tracker_obj.description)
+        prov_tracker_obj.provenance_obj=prov_tracker_obj.provenance_obj.get_prov_feature_transformation(new_df,changed_col,code,code_line, prov_tracker_obj.description)
         prov_tracker_obj.reset_description()
         return
     elif not feature_change and len(changed_col)>0:
         #value transform
         print(f'Value change detected on {changed_col} columns')
-        prov_tracker_obj.provenance_obj=prov_tracker_obj.provenance_obj.get_prov_value_transformation(new_df, changed_col,prov_tracker_obj.description)
+        prov_tracker_obj.provenance_obj=prov_tracker_obj.provenance_obj.get_prov_value_transformation(new_df, changed_col,code,code_line,prov_tracker_obj.description)
         prov_tracker_obj.reset_description()
         return
 

@@ -21,12 +21,12 @@ def get_graph(tx,id):
     result1=tx.run(f'match (e:Entity {{EntityId:"{id}"}})-[r:WAS_DERIVED_FROM*0..]->(m:Entity) match (m:Entity)-[w]-(a:Activity)  return e,r,m,a,w')
     #result1=tx.run(query_generated1)
     return result1
-def get_item_history_neo4j(value, feature, index, activities, relations, derivations, entities):
+def get_item_history_neo4j(value, feature, index):
     partialId=value+SEPARATOR+feature+SEPARATOR+index+SEPARATOR
     with driver.session() as session:
         newest_id = session.write_transaction(get_newest_element,partialId)
         print(newest_id)
-        query_generated = f'match (e:Entity {{EntityId:"{newest_id}"}})-[r:WAS_DERIVED_FROM*0..]->(m:Entity) match (m:Entity)-[w]-(a:Activity)  return e,r,m,a,w'
+        query_generated = f'match (e:Entity {{EntityId:"{newest_id}"}})-[r:WAS_DERIVED_FROM*0..]->(m:Entity) match (m:Entity)-[w]-(a:Activity)  return distinct  e,r,m,a,w'
         query_generated1 = f'match (e:Entity {{EntityId:"K0^^key1^^0^^12"}})-[r:WAS_DERIVED_FROM*0..]->(m:Entity) match (m:Entity)-[w]-(a:Activity)  return e,r,m,a,w'
 
         print(query_generated==query_generated1)
@@ -94,4 +94,27 @@ def get_item_history_neo4j(value, feature, index, activities, relations, derivat
     toJSON = list(nodes.values())
     #print(toJSON)
     print(len(nodes.keys()))
+    print(nodes)
+    print(rels)
+    dict_relations=dict.fromkeys(nodes.keys())
+    for el in rels:
+        if dict_relations[el[0]]==None:
+            dict_relations[el[0]]=[el[2]]
+        else:
+            dict_relations[el[0]].append(el[2])
+        if dict_relations[el[1]] == None:
+            dict_relations[el[1]] = [el[2]]
+        else:
+            dict_relations[el[1]].append(el[2])
+    print(dict_relations)
+    dict_relations=[k for k,v in dict_relations.items() if v==['USED']]
+
+    print(len(rels),len(nodes.keys()))
+
+    for el in dict_relations:
+        print(el)
+        del nodes[el]
+
+    rels=[x for x in rels if x[0] not in dict_relations]
+    print(len(rels),len(nodes.keys()))
     return rels,nodes

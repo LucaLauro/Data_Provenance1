@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+    <meta charset="UTF-8">
+    <link rel= "stylesheet" type= "text/css" href= "{{ url_for('static',filename='dashboard.css') }}">
+    <!-- Latest compiled and minified CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <!-- jQuery library -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+    <!-- Popper JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.16.0/umd/popper.min.js"></script>
+
+    <!-- Latest compiled JavaScript -->
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+
+</head>
+<body>
+
+
+<nav class="navbar navbar-expand-sm bg-dark navbar-dark form-group">
+
+
+    <a href="index"><button class="btn btn-primary ml-sm-2">Link Text</button></a>
+
+
+</nav>
+    <div class="row form-group mr-20 mt-40">
+        <div class="col-lg-1 pr-0"></div>
+        <div class="card col-lg-2 shadow-card-dash loading-spin" id="spinner-loading" >
+            <div class="spinner-border text-danger" style="width: 4rem; height: 4rem;margin-top:25px" role="status"></div>
+            <span  class="loading-span">Loading...</span>
+
+        </div>
+        <div class="card col-lg-3  shadow-card-dash" id="donut-chart-card">
+            <div id="donut-chart">
+
+            </div>
+        </div>
+        <div class="card col-lg-5 " id="card-chart">
+            <div id="chart">
+            </div>
+        </div>
+    </div>
+    <div class="row mr-40">
+        <div class="col-lg-1"></div>
+        <div class="card col-lg-3 shadow-card-dash" id="table-function">
+            <table class="table table-borderless mb-0">
+                <thead>
+                    <tr>
+                        <th>Function Name</th>
+                        <th>Time(s)</th>
+
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for fun in functions %}
+                    <tr>
+                        <td class="text-bold-500">{{ fun.name}}</td>
+                        <td>{{fun.time}}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="card col-lg-7  float-right" id="card-chart_relations">
+                <div id="chart_relations">
+                </div>
+            </div>
+    </div>
+<button class="btn btn-primary ml-sm-2">Link Text</button>
+</body>
+<script type="text/javascript" src="{{ url_for('static', filename='chart_entities.js') }}"></script>
+<script type="text/javascript" src="{{ url_for('static', filename='chart_relations.js') }}"></script>
+<script type="text/javascript" src="{{ url_for('static', filename='donut-chart.js') }}"></script>
+
+</html>

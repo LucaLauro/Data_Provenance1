@@ -2,6 +2,8 @@ from prov_acquisition.prov_libraries import logic_tracker
 import pandas as pd
 import numpy as np
 import time
+import inspect
+
 class TooManyArg(Exception):
     pass
 global_tracker=0    # instance of a global variable used for tracking with __setitem__
@@ -24,6 +26,7 @@ class ProvenanceTracker:
         provenance_obj: provenance object that contains provenance methods
         """
         #
+
         self._df = New_df(initial_df)
         self._copy_df=New_df(initial_df.copy())
         self.provenance_obj = provenance_obj
@@ -50,10 +53,12 @@ class ProvenanceTracker:
             if not self._df.equals(self._copy_df):
                 if len(logic_tracker.columns_list_difference(self._df.columns, self._copy_df.columns)) > 0:
                     # column name change
+
                     new_col = logic_tracker.columns_list_difference(self._df.columns, self._copy_df.columns)
                     old_col = logic_tracker.columns_list_difference(self._copy_df.columns, self._df.columns)
                     if nan_equal(self._df[new_col].values,self._copy_df[old_col].values):
                         print(f'Column {old_col} renamed in {new_col}')
+
                 else:
                     #print('difference founded')
                     self.value_change = True
@@ -68,14 +73,19 @@ class ProvenanceTracker:
             global_tracker = self
 
     def track_provenance(self):
+
         global global_tracker
         if self.shape_change:
-            logic_tracker.shape_change_provenance_tracking(self)
+            code_line=inspect.stack()[2].lineno
+            code=inspect.stack()[2].code_context[0].strip(' ').strip('\n')
+            logic_tracker.shape_change_provenance_tracking(self,code,code_line)
             self._copy_df=self._df.copy()
             self.shape_change = False
             global_tracker = self
         elif self.value_change:
-            logic_tracker.value_change_provenance_tracking(self)
+            code_line=inspect.stack()[2].lineno
+            code=inspect.stack()[2].code_context[0].strip(' ').strip('\n')
+            logic_tracker.value_change_provenance_tracking(self,code,code_line)
             self._copy_df=self._df.copy()
             self.value_change = False
             global_tracker = self
@@ -94,7 +104,9 @@ class ProvenanceTracker:
             # Union operation
             print('Union detected')
             # launch provenace
-            self.provenance_obj.get_prov_union(self._df, self.join_operation['axis'],self.description)
+            code_line = inspect.stack()[1].lineno
+            code = inspect.stack()[1].code_context[0].strip(' ').strip('\n')
+            self.provenance_obj.get_prov_union(self._df, self.join_operation['axis'],code,code_line,self.description)
             self.reset_description()
             # reset join op
             self.join_operation['axis'] = None
@@ -106,8 +118,10 @@ class ProvenanceTracker:
             # Join operation
             print('Join detected')
             #launch provenance
+            code_line = inspect.stack()[1].lineno
+            code = inspect.stack()[1].code_context[0].strip(' ').strip('\n')
             print('Warning, use the principal df as left df and second df as right df. Only standard suffix will work. Duplicate rows will not work')
-            self.provenance_obj.prov_join_hash(self._df,self.join_operation['on'],self.description)
+            self.provenance_obj.prov_join_hash(self._df,self.join_operation['on'],code,code_line,self.description)
             self.reset_description()
             # reset join op
             self.join_operation['on'] = None
@@ -121,12 +135,16 @@ class ProvenanceTracker:
         #print(f'dataframe is changed {time.time()-t}')
         if self.shape_change:
             # shape is changed
-            logic_tracker.shape_change_provenance_tracking(self)
+            code_line = inspect.stack()[1].lineno
+            code = inspect.stack()[1].code_context[0].strip(' ').strip('\n')
+            logic_tracker.shape_change_provenance_tracking(self,code,code_line)
             self.shape_change = False
             global_tracker = self
         elif self.value_change:
+            code_line = inspect.stack()[1].lineno
+            code = inspect.stack()[1].code_context[0].strip(' ').strip('\n')
             # a value is changed in the df
-            logic_tracker.value_change_provenance_tracking(self)
+            logic_tracker.value_change_provenance_tracking(self,code,code_line)
             self.value_change = False
             global_tracker = self
         self._copy_df = self._df.copy()
@@ -137,7 +155,9 @@ class ProvenanceTracker:
         self.col_add = []
         if type(col_joined)==str:
             col_joined = [col_joined]
-        self.provenance_obj.get_prov_space_transformation(self._df, col_joined,shift_period, self.description)
+        code_line = inspect.stack()[1].lineno
+        code = inspect.stack()[1].code_context[0].strip(' ').strip('\n')
+        self.provenance_obj.get_prov_space_transformation(self._df, col_joined,shift_period,code,code_line, self.description)
         self.reset_description()
         return
 
@@ -176,7 +196,9 @@ class ProvenanceTracker:
 
     def checkpoint(self,columns_to_check):
         print(f'Checkpoint on {columns_to_check}')
-        self.provenance_obj.checkpoint(self._df,columns_to_check, self.description)
+        code_line = inspect.stack()[1].lineno
+        code = inspect.stack()[1].code_context[0].strip(' ').strip('\n')
+        self.provenance_obj.checkpoint(self._df,columns_to_check,code,code_line, self.description)
         self.reset_description()
 class New_df(pd.DataFrame):
     # Override of __setitem__ of pandas, when item is set the changes are recorded
