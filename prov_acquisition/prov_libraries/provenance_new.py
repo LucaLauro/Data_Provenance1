@@ -7,7 +7,7 @@ import json
 from multiprocessing import Process, Queue
 from run import run2
 import pymongo
-
+from pandas.api.types import is_numeric_dtype
 # global variables for multiprocessing operations
 global current_relation
 global new_entities
@@ -15,7 +15,6 @@ global current_derivations
 current_relation = []
 new_entities = []
 current_derivations = []
-
 
 class Provenance:
     # Constants:
@@ -63,12 +62,15 @@ class Provenance:
         self.df = pd.DataFrame.copy(df)
         # Set results path:
         self.results_path = self.DEFAULT_PATH + time.strftime('%Y%m%d-%H%M%S') if results_path is None else results_path
-
+        self.last_feature_modify_op_num = dict()
+        self.last_feature_modify_op_num_second = dict()
         # Create provenance entities of the input dataframe:
         self.current_ent = self.create_prov_entities(df, self.INPUT)
         # inizialize second dataframe
         self.second_df = []
         self.current_second_ent = []
+        self.second_df_op_num=''
+
         # Save input provenance document
         # self.save_json_prov(os.path.join(self.results_path, self.INPUT))
 
@@ -113,6 +115,130 @@ class Provenance:
             return ret
 
         return wrap
+    def get_dataframe_metadata(self, df,folder_name,activity=None,two_input_df_op=False):
+        print(activity)
+        output_name = os.path.join(self.results_path, folder_name)
+        if self.operation_number>-1:
+            output_name=output_name+str(self.operation_number)
+        output_name = os.path.join(output_name, 'df_metadata')
+        n_col=str(df.shape[1])
+        n_index=str(df.shape[0])
+        percent_missing = df.isnull().sum() * 100 / len(df)
+        list_percent_column_nan=str(list(map(list, zip(percent_missing, percent_missing.index))))
+        columns=str(list(df.columns))
+        d_types=df.dtypes.value_counts()* 100 / df.shape[1]
+        list_percent_dtypes = str(list(map(list, zip(d_types, [x.name for x in d_types.index]))))
+        corr_matrix=str(df.corr().values.tolist())+','+str(df.corr().columns.tolist())
+        id='df_'+str(self.operation_number)
+        if folder_name=='input':
+            dict_metadata={'id':[id],'n_col':[n_col],'n_index':[n_index],'list_percent_column_nan':[list_percent_column_nan],'columns':[columns],'list_percent_dtypes':[list_percent_dtypes],'corr_matrix':[corr_matrix]}
+            df_ents = pd.DataFrame.from_dict(dict_metadata)
+            df_ents.to_csv(output_name+'.csv', index=False, encoding='utf-8')
+        else:
+            dict_metadata = {'id': [id], 'n_col': [n_col], 'n_index': [n_index],
+                             'list_percent_column_nan': [list_percent_column_nan], 'columns': [columns],
+                             'list_percent_dtypes': [list_percent_dtypes], 'corr_matrix': [corr_matrix]}
+            df_ents = pd.DataFrame.from_dict(dict_metadata)
+            df_ents.to_csv(output_name + '.csv', index=False, encoding='utf-8')
+            derivations_to_dfmeta=[]
+            derivations_from_dfmeta=[]
+
+            for act in activity:
+                if self.second_df_op_num!='':
+                    if self.operation_number-1==self.second_df_op_num:
+                        op=self.operation_number-2
+                    else:
+                        op=self.operation_number-1
+                else:
+                    op = self.operation_number - 1
+                derivations_to_dfmeta.append({'gen': id, 'used':act })
+                derivations_from_dfmeta.append({'gen': act, 'used':'df_'+str(op)})
+
+                if two_input_df_op:
+                    derivations_from_dfmeta.append({'gen': act, 'used':'df_'+str(self.second_df_op_num)})
+            meta_deriv = pd.DataFrame(derivations_from_dfmeta)
+            meta_deriv.to_csv(output_name + '_from_relations.csv', index=False, encoding='utf-8')
+            meta_deriv = pd.DataFrame(derivations_to_dfmeta)
+            meta_deriv.to_csv(output_name + '_to_relations.csv', index=False, encoding='utf-8')
+
+
+    def get_feature_metadata(self, df,feature, folder_name,delete=False,activity=None,deriv_feature=None,two_input_feature_op=False,second_feature=None):
+        output_name = os.path.join(self.results_path, folder_name)
+        if self.operation_number > -1:
+            output_name = output_name + str(self.operation_number)
+        output_name = os.path.join(output_name, f'feature_metadata_{feature}')
+        feature_name=feature
+        if not delete:
+            index_len=len(df[feature])
+            dtype=df[feature].dtype.name
+            distinct_values=list(df[feature].unique())
+            describe = df[feature].describe()
+            describe_list=list(map(list, zip(describe.index,describe)))
+            if is_numeric_dtype(df[feature]):
+                distribution = df[feature].value_counts()
+                dist_plot = list(map(list, zip(distribution.index, distribution)))
+                if len(dist_plot)>50:
+                    binned=pd.cut(df[feature], 30).value_counts()
+                    binned = binned.to_frame()
+                    binned['sortkey'] = [x.left for x in binned.index]
+                    binned = binned.sort_values('sortkey')
+                    binned=binned.drop(columns=['sortkey'])
+                    binned = binned.squeeze()
+                    dist_plot = list(map(list, zip([str(x.left)+'-'+str(x.right) for x in binned.index], binned)))
+            else:
+                distribution=df[feature].value_counts()
+                dist_plot=list(map(list, zip(distribution.index, distribution)))
+            id = f'{feature}_' + str(self.operation_number)
+        if folder_name == 'input' :
+            dict_metadata = {'id': [id], 'feature_name': [feature_name], 'index_len': [index_len],
+                             'dtype': [dtype], 'distinct_values': [distinct_values],
+                             'describe_list': [describe_list], 'dist_plot': [dist_plot]}
+            df_ents = pd.DataFrame.from_dict(dict_metadata)
+            df_ents.to_csv(output_name + '.csv', index=False, encoding='utf-8')
+        if folder_name == 'output' :
+            if not delete:
+                dict_metadata = {'id': [id], 'feature_name': [feature_name], 'index_len': [index_len],
+                                 'dtype': [dtype], 'distinct_values': [distinct_values],
+                                 'describe_list': [describe_list], 'dist_plot': [dist_plot]}
+                df_ents = pd.DataFrame.from_dict(dict_metadata)
+                df_ents.to_csv(output_name + '.csv', index=False, encoding='utf-8')
+            derivations_to_feature_meta = []
+            derivations_from_feature_meta = []
+            derivations_feature_meta=[]
+
+            act=activity
+            if delete:
+
+                derivations_from_feature_meta.append({'gen': act, 'used':f'{feature}_'+str(self.last_feature_modify_op_num[feature])})
+                self.last_feature_modify_op_num[feature]=self.operation_number
+                print(f'delete:{delete}, {derivations_from_feature_meta}')
+            else:
+                derivations_to_feature_meta.append({'gen': id, 'used':act })
+                #gestire lista deriv_feature
+                if deriv_feature is not None:
+                    if type(deriv_feature)==list:
+                        for deriv_f in deriv_feature:
+                            derivations_from_feature_meta.append({'gen': act, 'used': f'{feature}_' + str(
+                                self.last_feature_modify_op_num[deriv_f])})
+                            derivations_feature_meta.append({'gen': id, 'used': f'{feature}_' + str(
+                                self.last_feature_modify_op_num[deriv_f])})
+                    else:
+                        derivations_from_feature_meta.append({'gen': act, 'used':f'{deriv_feature}_'+str(self.last_feature_modify_op_num[deriv_feature])})
+                        derivations_feature_meta.append({'gen': id, 'used':f'{deriv_feature}_'+str(self.last_feature_modify_op_num[deriv_feature]) })
+                    self.last_feature_modify_op_num[feature]=self.operation_number
+
+            if two_input_feature_op:
+                derivations_from_feature_meta.append({'gen': act, 'used':f'{second_feature}_'+str(self.last_feature_modify_op_num_second[second_feature])})
+                derivations_feature_meta.append({'gen': id, 'used':f'{second_feature}_'+str(self.last_feature_modify_op_num_second[second_feature]) })
+                self.last_feature_modify_op_num[feature] = self.operation_number
+
+            meta_deriv = pd.DataFrame(derivations_from_feature_meta)
+            meta_deriv.to_csv(output_name + '_from_relations.csv', index=False, encoding='utf-8')
+            meta_deriv = pd.DataFrame(derivations_to_feature_meta)
+            meta_deriv.to_csv(output_name + '_to_relations.csv', index=False, encoding='utf-8')
+            meta_deriv = pd.DataFrame(derivations_feature_meta)
+            meta_deriv.to_csv(output_name + '_derivations.csv', index=False, encoding='utf-8')
+
 
     def create_entity(self, record_id, value, feature_name, index, instance):
         """Create a provenance entity.
@@ -306,7 +432,7 @@ class Provenance:
             p.start()
 
     @timing
-    def create_prov_entities(self, dataframe, instance=None):
+    def create_prov_entities(self, dataframe, instance=None,second_df=None):
         """Return a numpy array of new provenance entities related to the dataframe."""
         instance = self.instance if instance is None else instance
         columns = dataframe.columns
@@ -314,7 +440,7 @@ class Provenance:
         tot_ent = len(columns) * len(indexes)
         if self.operation_number > -1:
             # adding a second dataframe to inputs, join in progress
-            nameFile = os.path.join(self.results_path, self.INPUT + '_' + str(self.operation_number))
+            nameFile = os.path.join(self.results_path, self.INPUT  + str(self.operation_number))
         else:
             nameFile = os.path.join(self.results_path, self.INPUT)
         """Save provenance in json file."""
@@ -340,7 +466,13 @@ class Provenance:
 
         # Save input entities in json files
         self.save_entities_multiproc(self.new_entities, ents_path)
-
+        self.get_dataframe_metadata(dataframe,self.INPUT)
+        for feature in columns:
+            self.get_feature_metadata(dataframe, feature, self.INPUT)
+            if not second_df:
+                self.last_feature_modify_op_num[feature]=self.operation_number
+            else:
+                self.last_feature_modify_op_num_second[feature]=self.operation_number
         #salva in file diversi dataset e feature data
 
         return entities
@@ -480,7 +612,8 @@ class Provenance:
     def add_second_df(self, second_dataframe):
         self.second_df = second_dataframe
         self.initialize()
-        self.current_second_ent = self.create_prov_entities(second_dataframe, self.INPUT)
+        self.current_second_ent = self.create_prov_entities(second_dataframe, self.INPUT,True)
+        self.second_df_op_num=self.operation_number
         print('created second df entity')
 
     def get_dataset_level_data(self, df):
@@ -520,8 +653,11 @@ class Provenance:
         columns_out = df_out.columns
         indexes_out = df_out.index
         values = df_out.values
+        acts_id = []
+        feature_meta=[]
         for col_name in columnsName:
             act_id = self.create_activity(function_name, col_name,code=code,code_line=code_line,description=description)
+            acts_id.append(act_id)
             col_index = columns_out.get_loc(col_name)
             generated = []
             used = []
@@ -543,9 +679,11 @@ class Provenance:
 
         # Update current values:
         self.set_current_values(df_out, entities_in)
-
         # Save provenance document in json file:
         self.save_json_prov(os.path.join(self.results_path, self.instance))
+        self.get_dataframe_metadata(df_out, self.OUTPUT, activity=acts_id, two_input_df_op=False)
+        for feature,act,deriv_feature in feature_meta:
+            self.get_feature_metadata(df_out, feature, self.OUTPUT,activity=act,deriv_feature=deriv_feature)
 
         return self
 
@@ -698,6 +836,11 @@ class Provenance:
         time_start2 = time.time()
         # Save provenance document in json file:
         self.save_json_prov(os.path.join(self.results_path, self.instance))
+        self.get_dataframe_metadata(df_out, self.OUTPUT, activity=[act_id], two_input_df_op=False)
+        for feature in generated_features:
+            self.get_feature_metadata(df_out, feature, self.OUTPUT, activity=act_id, deriv_feature=columnsName)
+
+
         print('salvataggio: ', time.time() - time_start2)
         return self
 
@@ -822,9 +965,14 @@ class Provenance:
 
         # Update current values:
         self.set_current_values(df_out, entities_out)
-
         # Save provenance document in json file:
         self.save_json_prov(os.path.join(self.results_path, self.instance))
+        self.get_dataframe_metadata(df_out, self.OUTPUT, activity=[act_id], two_input_df_op=False)
+        for feature in delColumnsName:
+            self.get_feature_metadata(df_out, feature, self.OUTPUT,activity=act_id,delete=True)
+        if len(delColumnsName)==0:
+            for j in range(n):
+                self.get_feature_metadata(df_out, columns_out[j], self.OUTPUT, activity=act_id, deriv_feature=columns_in[j])
 
         return self
 
@@ -851,6 +999,7 @@ class Provenance:
         used = []
         # generated=dict()
         generated = []
+        feature_meta=[]
         # Provenance of existent data
         """
         for col_name in columnsName:
@@ -896,6 +1045,7 @@ class Provenance:
                 col_name = columns_out[j]
                 # act_id = acts[col_name] if col_name in acts else defaultAct_id
                 act_id = act_id_col_used if col_name in columnsName else defaultAct_id
+                feature_meta.append((col_name, act_id, self.current_columns[j]))
                 value = str(values[i, j])
                 e_out = self.create_entity(record_id, value, col_name, indexes_out[i], self.operation_number)
                 e_out_identifier = e_out['id']
@@ -917,10 +1067,11 @@ class Provenance:
 
         # Update current values:
         self.set_current_values(df_out, entities_out)
-
         # Save provenance document in json file:
         self.save_json_prov(os.path.join(self.results_path, self.instance))
-
+        self.get_dataframe_metadata(df_out, self.OUTPUT, activity=[act_id_col_used], two_input_df_op=False)
+        for feature, act, deriv_feature in feature_meta:
+            self.get_feature_metadata(df_out, feature, self.OUTPUT, activity=act, deriv_feature=deriv_feature)
         return self
 
     @timing
@@ -941,6 +1092,8 @@ class Provenance:
         columns_out = df_out.columns
         indexes_out = df_out.index
         values = df_out.values
+        acts_id=[]
+        feature_meta=[]
         for col_name in columnsName:
             add_act = True
             col_index = columns_out.get_loc(col_name)
@@ -959,6 +1112,9 @@ class Provenance:
                     if add_act:
                         # Create value transformation activity:
                         act_id = self.create_activity(function_name, col_name,code=code,code_line=code_line,description=description)
+                        feature_meta.append((col_name, act_id, self.current_columns[col_index]))
+
+                        acts_id.append(act_id)
                         add_act = False
                     # Create new entity with the new value
                     e_out = self.create_entity(record_id, value, col_name, indexes_out[i],
@@ -976,6 +1132,9 @@ class Provenance:
 
         # Save provenance document in json file:
         self.save_json_prov(os.path.join(self.results_path, self.instance))
+        self.get_dataframe_metadata(df_out, self.OUTPUT, activity=acts_id, two_input_df_op=False)
+        for feature,act,deriv_feature in feature_meta:
+            self.get_feature_metadata(df_out, feature, self.OUTPUT,activity=act, deriv_feature=deriv_feature)
 
         return self
 
@@ -996,9 +1155,14 @@ class Provenance:
         indexes_out = df_out.index
         values = df_out.values
         t = time.time()
+        acts_id=[]
+        feature_meta=[]
         for col_name in columnsName:
             act_id = self.create_activity(function_name, col_name,code=code,code_line=code_line,description=description)
+            acts_id.append(act_id)
             col_index = columns_out.get_loc(col_name)
+            feature_meta.append((col_name, act_id, self.current_columns[col_index]))
+
             generated = []
             used = []
             invalidated = []
@@ -1029,6 +1193,10 @@ class Provenance:
         print(f'save {time.time() - t}')
         # Update current values:
         self.set_current_values(df_out, entities_in)
+        self.get_dataframe_metadata(df_out, self.OUTPUT, activity=acts_id, two_input_df_op=False)
+        for feature, act, deriv_feature in feature_meta:
+            self.get_feature_metadata(df_out, feature, self.OUTPUT, activity=act, deriv_feature=deriv_feature)
+
         print(f'set {time.time() - t}')
 
         return self
@@ -1159,7 +1327,7 @@ class Provenance:
         list_second_columns = list(column_second_df)
         used_features = list(set(list_columns + list_second_columns))
         # Output values:
-        columns_out = df_out.columns
+        columns_out = list(df_out.columns)
         indexes_out = df_out.index
         values = df_out.values
         entities_out = np.empty(df_out.shape, dtype=object)
@@ -1208,6 +1376,19 @@ class Provenance:
         self.save_json_prov(os.path.join(self.results_path, self.instance))
         # Update current values:
         self.set_current_values(df_out, entities_out)
+        self.get_dataframe_metadata(df_out, self.OUTPUT, activity=[act_id], two_input_df_op=True)
+        for j,feature in enumerate(columns_out):
+            if j < len(self.current_columns):
+                self.get_feature_metadata(df_out, feature, self.OUTPUT,activity=act_id,deriv_feature=feature)
+                if columns_out[j] in column_second_df:
+                    self.get_feature_metadata(df_out, feature, self.OUTPUT, activity=act_id,
+                                              second_feature=feature,
+                                              two_input_feature_op=True)
+            else:
+                self.get_feature_metadata(df_out, feature, self.OUTPUT, activity=act_id,
+                                          second_feature=feature,
+                                          two_input_feature_op=True)
+
 
         return self
 
@@ -1829,6 +2010,15 @@ class Provenance:
         # Update current values:
         print('setting')
         self.set_current_values(df_out, entities_out)
+        self.get_dataframe_metadata(df_out, self.OUTPUT, activity=[act_id], two_input_df_op=True)
+        for i,feature in enumerate(columns_out):
+            if i in columns_mapping_left and i in columns_mapping_right:
+                self.get_feature_metadata(df_out, feature, self.OUTPUT,activity=act_id,deriv_feature=list_columns[columns_mapping_left[i]],second_feature=list_second_columns[columns_mapping_right[i]],two_input_feature_op=True)
+                continue
+            if i in columns_mapping_left:
+                self.get_feature_metadata( df_out, feature, self.OUTPUT,activity=act_id,deriv_feature=list_columns[columns_mapping_left[i]])
+            if i in columns_mapping_right:
+                self.get_feature_metadata( df_out, feature, self.OUTPUT,activity=act_id,second_feature=list_second_columns[columns_mapping_right[i]],two_input_feature_op=True)
         print(f'setted:{time.time() - t}')
         # print(entities_out)
 
@@ -2212,12 +2402,17 @@ class Provenance:
         columns_out = df_out.columns
         indexes_out = df_out.index
         values = df_out.values
+        acts_id=[]
+        feature_meta=[]
         for col_name in columns_to_check:
             act_id = self.create_activity(function_name, col_name,code=code,code_line=code_line,description=description)
+            acts_id.append(act_id)
             col_index = columns_out.get_loc(col_name)
             generated = []
             used = []
             invalidated = []
+            feature_meta.append((col_name, act_id, col_name))
+
             for i in range(self.current_m):
                 e_in = entities_in[i][col_index]
                 e_in_identifier = e_in['id']
@@ -2238,6 +2433,9 @@ class Provenance:
 
         # Save provenance document in json file:
         self.save_json_prov(os.path.join(self.results_path, self.instance))
+        self.get_dataframe_metadata(df_out, self.OUTPUT, activity=acts_id, two_input_df_op=False)
+        for feature, act, deriv_feature in feature_meta:
+            self.get_feature_metadata(df_out, feature, self.OUTPUT, activity=act, deriv_feature=deriv_feature)
 
         return self
 
