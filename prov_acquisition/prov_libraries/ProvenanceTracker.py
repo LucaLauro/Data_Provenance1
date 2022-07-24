@@ -1,4 +1,4 @@
-from prov_acquisition.prov_libraries import logic_tracker
+from prov_libraries import logic_tracker
 import pandas as pd
 import numpy as np
 import time

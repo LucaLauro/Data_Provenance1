@@ -4,15 +4,17 @@
 import sys
 
 sys.path.append('../')
-from prov_acquisition.prov_libraries import provenance_new as pr
+from prov_libraries import provenance_new as pr
 import pandas as pd
 import time
 import argparse
 import os
-from prov_acquisition.prov_libraries import ProvenanceTracker
+from prov_libraries import ProvenanceTracker
 import numpy as np
-from run import run
-def main(dbname):
+from run import run2
+import pathlib
+
+def main():
     output_path = 'prov_results'
 
     # Specify where to save the processed files as savepath
@@ -74,10 +76,9 @@ def main(dbname):
     # sto space transformation explicitiing the derivation column(automatic if D was dropped)
     tracker.stop_space_prov('D')
     print(tracker.df)
-    run(dbname,savepath)
+    path = pathlib.Path().resolve()
+    savepath = os.path.join(path, savepath)
+    run2('demo', savepath)
 if __name__ == '__main__':
-    if len(sys.argv) == 2 :
-        main(sys.argv[1])
-    else:
-        print('[ERROR] usage: demo_shell.py <db_name> ')
+    main()
 

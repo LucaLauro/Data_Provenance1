@@ -5,8 +5,8 @@ import os
 import time
 import json
 from multiprocessing import Process, Queue
-from ..run import run2
-import pymongo
+#from ..run import run2
+#import pymongo
 from pandas.api.types import is_numeric_dtype
 # global variables for multiprocessing operations
 global current_relation
@@ -42,7 +42,7 @@ class Provenance:
     SEPARATOR = '^^'
 
     def __init__(self, df, dbname, results_path=None):
-        p = Process(target=run2, args=(dbname,))
+        #p = Process(target=run2, args=(dbname,))
         # p.start()
         self.dbname = dbname
         # Inizialize provenance activities, relations and new entities

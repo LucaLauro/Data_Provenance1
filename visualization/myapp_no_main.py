@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify
-import pymongo
+#import pymongo
 import sys
 from visualization.item_history_bfs import get_item_history
 from visualization.item_history_neo4j import get_item_history_neo4j
@@ -51,6 +51,9 @@ def index():
 @app.route("/home")
 def home():
     return render_template('home.html')
+@app.route("/meta")
+def meta():
+    return render_template('test_meta_dash.html')
 @app.route("/index3.html/", methods=['GET', 'POST'])
 def item_history():
     index = request.args['index']
