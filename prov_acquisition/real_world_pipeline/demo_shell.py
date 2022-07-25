@@ -21,10 +21,10 @@ def main():
     savepath = os.path.join(output_path, 'demo')
 
     df = pd.DataFrame({'key1': ['K0', 'K0', 'K1', 'K2', 'K0'],
-                         'key2': ['K0', np.nan, 'K0', 'K1', 'K0'],
-                         'A': ['A0', 'A1', 'A2', 'A3', 'A4'],
-                         'B': ['B0', 'B1', 'B2', 'B3', 'B4']
-                         })
+                       'key2': ['K0', np.nan, 'K0', 'K1', 'K0'],
+                       'A': ['A0', 'A1', 'A2', 'A3', 'A4'],
+                       'B': ['B0', 'B1', 'B2', 'B3', 'B4']
+                       })
     right = pd.DataFrame({'key1': ['K0', np.nan, 'K1', 'K2', ],
                           'key2': ['K0', 'K4', 'K0', 'K0'],
                           'A': ['C0', 'C1', 'C2', 'C3'],
@@ -38,43 +38,67 @@ def main():
     print('[' + time.strftime("%d/%m-%H:%M:%S") + '] Initialization')
     # Create a new provenance document
 
-    p = pr.Provenance(df, savepath)
+    p = pr.Provenance(df, '', savepath)
+
     # create provanance tracker
-    tracker=ProvenanceTracker.ProvenanceTracker(df, p)
+    tracker = ProvenanceTracker.ProvenanceTracker(df, p)
+
     # add second df to tracker for join or union operation, provenance of second df is not tracked
     tracker.add_second_df(right)
+
     # add used column for next instance generation
-    tracker.set_used_columns(['key2'])
+    tracker.set_used_columns(['key2', 'B'])
+
     # instance generation
     tracker.df = tracker.df.append({'key2': 'K4'}, ignore_index=True)
+
     # set description for next operation (string in the activity in provenance visualization)
     tracker.set_description('Join1')
-    # set join on columns
-    tracker.set_join_op(axis=None, on=['key1','key2'])
-    # join
-    tracker.df = pd.merge(tracker.df, tracker.second_df, on=['key1','key2'], how='left')
-    # imputation
-    tracker.df = tracker.df.fillna('imputato')
-    # feature transformation of column D
-    tracker.df['D'] = tracker.df['D']*2
-    # add second df to tracker for join or union operation
-    tracker.add_second_df(df2)
+
     # set join on columns
     tracker.set_join_op(axis=None, on=['key1', 'key2'])
+
+    # join
+    tracker.df = pd.merge(tracker.df, tracker.second_df, on=['key1', 'key2'], how='left')
+
+    # imputation
+    tracker.df = tracker.df.fillna('imputato')
+
+    # feature transformation of column D
+    tracker.df['D'] = tracker.df['D'] * 2
+
+    # add second df to tracker for join or union operation
+    tracker.add_second_df(df2)
+
+    # set join on columns
+    tracker.set_join_op(axis=None, on=['key1', 'key2'])
+
     # join 2
     tracker.df = pd.merge(tracker.df, tracker.second_df, on=['key1', 'key2'], how='left')
+
     # Feature transformation of column key2
-    tracker.df['key2'] = tracker.df['key2']*2
+    tracker.df['key2'] = tracker.df['key2'] * 2
+
     # Imputation 2
     tracker.df = tracker.df.fillna('imputato')
-    # One hot encoding
-    c='D'
+
+    # Space transformation 1,without delete columns(using stop_space_prov as trigger)
+    c = 'D'
     dummies = []
     dummies.append(pd.get_dummies(tracker.df[c]))
     df_dummies = pd.concat(dummies, axis=1)
     tracker.df = pd.concat((tracker.df, df_dummies), axis=1)
-    # sto space transformation explicitiing the derivation column(automatic if D was dropped)
     tracker.stop_space_prov('D')
+
+    # Space transformation 2
+    c = 'E'
+    dummies = []
+    dummies.append(pd.get_dummies(tracker.df[c]))
+    df_dummies = pd.concat(dummies, axis=1)
+    tracker.df = pd.concat((tracker.df, df_dummies), axis=1)
+    tracker.df = tracker.df.drop([c], axis=1)
+
+    tracker.df = tracker.df.drop(['B'], axis=1)
     print(tracker.df)
     path = pathlib.Path().resolve()
     savepath = os.path.join(path, savepath)
