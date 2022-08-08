@@ -1,5 +1,5 @@
 # DataProvenance 
-App for capture and visualize data provenance and metadata of a preprocessing Pipeline,
+App for capture and visualize data provenance and metadata of a preprocessing Pipeline.
 
 
 ## Needed Libraries
