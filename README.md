@@ -30,17 +30,14 @@ After the result has been uploded in Neo4j the visualization app will available 
 
 ## Execute only the visualization app
 
-From terminal, in the folder of the app launch `python3 myapp.py db_name`
+From terminal, in the folder of *prov_acquisition/real_world_pipeline* launch `python3 run_app.py `
 
 In the browser the app can be accessed on the address `localhost:5000`
 
-In the 3 text input (Value, Index, Feature) write the relative information of the entity (an element of a df)
- 
-From the GUI is possible to execute 2 queries:
-* Item history
-* Record history
+The tab Dataframe Meta describe all the operation and the elements at a dataset level
 
-Item History displays all the values(and other details) that had the searched entity after each preprocessing operation
+The tab Feature Meta describe all the operation and the elements at a feature level
 
-Record history displays all the histories of each element in the same row of the searched entity
+Is possible to compare Dataframe meta and Feature Meta using the button Compare Dataset or Compare feature.
 
+From the Feature Meta is also possible to show the history of a single value of the feature
