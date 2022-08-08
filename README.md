@@ -1,28 +1,30 @@
 # DataProvenance 
-App for capture and visualize data provenance 
+App for capture and visualize data provenance and metadata of a preprocessing Pipeline,
 
 
 ## Needed Libraries
 * [flask](https://flask.palletsprojects.com/en/1.1.x/)
-* [pymongo](https://pymongo.readthedocs.io/en/stable/)
+* [neo4j](https://github.com/neo4j/neo4j-python-driver)
 * use python3 3.6+
 * pandas
 * numpy
 ## Used Libraries for visualization
 * dagre
 * dagre-d3
+##Tested DB
+* Neo4j Desktop 4.3.6
 ## Execution
 
+1. Set Up the Neo4j DB and comment the row `dbms.directories.import=import`. Use the default credentials
 
-1. To execute the demo pipeline:
+2. To execute the demo pipeline:
     * In terminal go in the folder *prov_acquisition/*
-    * Execute the file with the command `python3 real_world_pipeline/demo_shell.py` followed by the name of the collection to be created in Mongo DB `dbname`.
-    Example:, **python3 real_world_pipeline/demo_shell.py demo**
+    * Execute the file with the command `python3 real_world_pipeline/demo_shell.py` .
     
    
-The result will be stored in the folder *prov_acquisition/prov_results/<dataset_name>* and loaded in Mongo.
+The result will be stored in the folder *prov_acquisition/prov_results/<dataset_name>* and loaded in Neo4j.
 
-After the result has been uploded in MongoDB the visualization app will available at the address **localhost:5000**
+After the result has been uploded in Neo4j the visualization app will available at the address **localhost:5000**
 
 
 
