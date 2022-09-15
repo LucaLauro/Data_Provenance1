@@ -1,46 +1,36 @@
 
 function update_text() {
-      document.getElementById("index_num").innerText=df_meta[op_index]['N_Index'];
-      document.getElementById("col_num").innerText=df_meta[op_index]['N_Column'];
-            document.getElementById("code_activity").innerText='Line: '+df_meta[op_index]['CodeLine']+' Code: '+df_meta[op_index]['Code'];
+      document.getElementById("feature_name").innerText=feature_meta[op_index]['feature_name'];
+      document.getElementById("index_len").innerText=feature_meta[op_index]['index_len'];
+      document.getElementById("feature_dtype").innerText=feature_meta[op_index]['dtype'];
+            document.getElementById("code_activity").innerText='Line: '+feature_meta[op_index]['CodeLine']+' Code: '+feature_meta[op_index]['Code'];
 
-      const list = document.getElementById("feature_names");
+      const list = document.getElementById("values_names");
       var features=''
-      for (const feature_index in df_meta[op_index]['Columns']) {
+      for (const feature_index in feature_meta[op_index]['distinct_values']) {
           console.log(feature_index)
-          features+='<h5 class="text-center">'+df_meta[op_index]['Columns'][feature_index]+'</h5>';
+          features+='<h5 class="text-center">'+feature_meta[op_index]['distinct_values'][feature_index]+'</h5>';
       }
       list.innerHTML = features;
-      var percentage_categories=[]
-      var percentage_values=[]
-      for (const index in df_meta[op_index]['NaNPercent']) {
-          percentage_values.push(df_meta[op_index]['NaNPercent'][index][0])
-          percentage_categories.push(df_meta[op_index]['NaNPercent'][index][1])
+    const describe = document.getElementById("feature_describe");
+      var features=''
+      for (const feature_index in feature_meta[op_index]['describe_list']) {
+          console.log(feature_index)
+          features+='<h5 class="text-center">'+feature_meta[op_index]['describe_list'][feature_index][0]+': '+feature_meta[op_index]['describe_list'][feature_index][1]+'</h5>';
       }
-      chart_bar_percentage.updateOptions({
-         xaxis: {
-            categories: percentage_categories
-         },
+      describe.innerHTML = features;
+
+     bar_chart_distribution.updateOptions({
+         labels: feature_meta[op_index]['dist_plot'][0],
          series: [{
-            data: percentage_values
-         }],
-      });
-      var corrmatrix=[]
-      for (const index in df_meta[op_index]['CorrMatrix'][1]) {
-          corrmatrix.push({name:df_meta[op_index]['CorrMatrix'][1][index],data: df_meta[op_index]['CorrMatrix'][0][index]})
-      };
-      console.log(corrmatrix);
-      chart_corr_matrix.updateOptions({
-         xaxis: {
-            categories: df_meta[op_index]['CorrMatrix'][1]
-         },
-         series: corrmatrix.reverse(),
-      });
-
-
-     multiradialChart.updateOptions({
-         labels: df_meta[op_index]['Dtype_percent'][1],
-         series: df_meta[op_index]['Dtype_percent'][0],
+          name: 'Distribution',
+          type: 'column',
+          data: feature_meta[op_index]['dist_plot'][1]
+        }, {
+          name: 'Distribution',
+          type: 'area',
+          data: feature_meta[op_index]['dist_plot'][1]
+        }]
       });
 
 }
@@ -120,7 +110,7 @@ svgGroup.selectAll('g.node.activity')
 svg.attr("width", g.graph().width + 120);
 
 
-svgGroup.selectAll('g.node.dfmeta')
+svgGroup.selectAll('g.node.featuremeta')
 .attr("data-tooltip", function(v) {
       return g.node(v).label
   })

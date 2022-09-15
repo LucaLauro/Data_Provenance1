@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <link href="https://fonts.googleapis.com/css?family=Rubik:300,400,500,600%7CIBM+Plex+Sans:300,400,500,600,700" rel="stylesheet">
+
+    <!-- BEGIN: Vendor CSS-->
+    <link rel= "stylesheet" type= "text/css" href= "{{ url_for('static',filename='styles.css') }}">
+
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='test_meta_dashboard/css/vendors.min.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='test_meta_dashboard/css/apexcharts.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='test_meta_dashboard/css/swiper.min.css') }}">
+    <!-- END: Vendor CSS-->
+  <!-- jQuery library -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+    <!-- Popper JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.16.0/umd/popper.min.js"></script>
+    <!-- BEGIN: Theme CSS-->
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='test_meta_dashboard/css/bootstrap.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='test_meta_dashboard/css/bootstrap-extended.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='test_meta_dashboard/css/colors.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='test_meta_dashboard/css/components.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='test_meta_dashboard/css/dark-layout.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='test_meta_dashboard/css/semi-dark-layout.css') }}">
+    <!-- END: Theme CSS-->
+
+    <!-- BEGIN: Page CSS-->
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='test_meta_dashboard/css/vertical-menu.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='test_meta_dashboard/css/dashboard-ecommerce.css') }}">
+    <!-- END: Page CSS-->
+
+    <!-- BEGIN: Custom CSS-->
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='test_meta_dashboard/css/style.css') }}">
+    <!-- END: Custom CSS-->
+    <script>var nodes = JSON.parse('{{ json_data | tojson | safe}}');</script>
+    <script>var edge = JSON.parse('{{ json_edge | tojson | safe}}');</script>
+    <script>var df_meta=JSON.parse('{{df_meta | tojson | safe}}');</script>
+    <script>var op_index_1=JSON.parse('{{op_index_1 | tojson | safe}}');</script>
+    <script>var op_index_2=JSON.parse('{{op_index_2 | tojson | safe}}');</script>
+
+    <script>var last_feature=JSON.parse('{{last_feature | tojson | safe}}');</script>
+    <script>var df_meta_operations=JSON.parse('{{df_meta_operations | tojson | safe}}');</script>
+    <script>var feature_meta_operations=JSON.parse('{{feature_meta_operations | tojson | safe}}');</script>
+</head>
+<div class="modal fade text-left" id="compare-dataframe" tabindex="-1" role="dialog" aria-labelledby="myModalLabel33" aria-hidden="true">
+                                            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+                                                <div class="modal-content">
+                                                    <div class="modal-header">
+                                                        <h4 class="modal-title" >Select Dataframe to compare </h4>
+                                                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                                            <i class="bx bx-x"></i>
+                                                        </button>
+                                                    </div>
+                                                        <div class="modal-body">
+                                                            <form action="/df_meta_compare" >
+                                                            <h6>First Dataframe</h6>
+                                                            <fieldset class="form-group">
+                                                                <select class="form-control" id="basicSelect" name="op_index_1">
+                                                                    {% for df_index in df_meta_operations %}
+                                                                        <option  value={{df_index}}>{{df_index}}</option>
+                                                                     {% endfor %}
+
+                                                                </select>
+                                                            </fieldset>
+                                                                <h6>Second Dataframe</h6>
+
+                                                                <fieldset class="form-group">
+                                                                <select class="form-control" id="basicSelect_1" name="op_index_2">
+                                                                    {% for df_index in df_meta_operations %}
+                                                                        <option  value={{df_index}}>{{df_index}}</option>
+                                                                     {% endfor %}
+
+                                                                </select>
+                                                            </fieldset>
+                                                                <button   type="submit"  class="btn btn-primary ml-1" >
+                                                                <i class="bx bx-check d-block d-sm-none"></i>
+                                                                <span class="d-none d-sm-block">Compare</span>
+                                                            </button>
+                                                                 </form>
+                                                        </div>
+                                                    <button type="button" class="btn btn-light-secondary" data-dismiss="modal">
+                                                                <i class="bx bx-x d-block d-sm-none"></i>
+                                                                <span class="d-none d-sm-block">Close</span>
+                                                            </button>
+
+
+                                                </div>
+                                            </div>
+                                        </div>
+<div class="modal fade text-left" id="compare-feature" tabindex="-1" role="dialog" aria-labelledby="myModalLabel33" aria-hidden="true">
+                                            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+                                                <div class="modal-content">
+                                                    <div class="modal-header">
+                                                        <h4 class="modal-title" >Select Feature to compare </h4>
+                                                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                                            <i class="bx bx-x"></i>
+                                                        </button>
+                                                    </div>
+                                                        <div class="modal-body">
+                                                            <form action="/feature_meta_compare" >
+                                                            <h6>First Feature</h6>
+                                                            <fieldset class="form-group">
+                                                                <select class="form-control"  name="op_index_1">
+                                                                    {% for feature_index in feature_meta_operations %}
+                                                                        <option  value={{feature_index}}>{{feature_index}}</option>
+                                                                     {% endfor %}
+
+                                                                </select>
+                                                            </fieldset>
+                                                                <h6>Second Feature</h6>
+
+                                                                <fieldset class="form-group">
+                                                                <select class="form-control"  name="op_index_2">
+                                                                    {% for feature_index in feature_meta_operations %}
+                                                                        <option  value={{feature_index}}>{{feature_index}}</option>
+                                                                     {% endfor %}
+
+                                                                </select>
+                                                            </fieldset>
+                                                                <button   type="submit"  class="btn btn-primary ml-1" >
+                                                                <i class="bx bx-check d-block d-sm-none"></i>
+                                                                <span class="d-none d-sm-block">Compare</span>
+                                                            </button>
+                                                                 </form>
+                                                        </div>
+                                                    <button type="button" class="btn btn-light-secondary" data-dismiss="modal">
+                                                                <i class="bx bx-x d-block d-sm-none"></i>
+                                                                <span class="d-none d-sm-block">Close</span>
+                                                            </button>
+
+
+                                                </div>
+                                            </div>
+                                        </div>
+<div class="modal fade text-left" id="single-entity" tabindex="-1" role="dialog" aria-labelledby="myModalLabel33" aria-hidden="true">
+                                            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+                                                <div class="modal-content">
+                                                    <div class="modal-header">
+                                                        <h4 class="modal-title" >Select Dataframe to compare </h4>
+                                                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                                            <i class="bx bx-x"></i>
+                                                        </button>
+                                                    </div>
+                                                        <div class="modal-body">
+                                                            <form action="/single_entity" >
+                                                            <fieldset class="form-group">
+                                                                <label for="basicInput">Value</label>
+                                                                <input type="text" class="form-control" name="value" placeholder="Enter Value" />
+                                                            </fieldset>
+                                                                 <fieldset class="form-group">
+                                                                <label for="basicInput">Feature Name</label>
+                                                                <input type="text" class="form-control" name="feature_name" placeholder="Enter Feature Name" />
+                                                            </fieldset>
+                                                                 <fieldset class="form-group">
+                                                                <label for="basicInput">Index</label>
+                                                                <input type="text" class="form-control" name="index" placeholder="Enter Index" />
+                                                            </fieldset>
+
+                                                                <button   type="submit"  class="btn btn-primary ml-1" >
+                                                                <i class="bx bx-check d-block d-sm-none"></i>
+                                                                <span class="d-none d-sm-block">Submit</span>
+                                                            </button>
+                                                                 </form>
+                                                        </div>
+                                                    <button type="button" class="btn btn-light-secondary" data-dismiss="modal">
+                                                                <i class="bx bx-x d-block d-sm-none"></i>
+                                                                <span class="d-none d-sm-block">Close</span>
+                                                            </button>
+
+
+                                                </div>
+                                            </div>
+                                        </div>
+
+<body>
+    <div class="main-menu menu-fixed menu-light menu-accordion menu-shadow" data-scroll-to-active="true">
+        <div class="navbar-header">
+            <ul class="nav navbar-nav flex-row">
+                <li class="nav-item mr-auto"><a class="navbar-brand" href="../../../html/ltr/vertical-menu-template/index.html">
+                        <div class="brand-logo">
+                        </div>
+                    </a></li>
+            </ul>
+        </div>
+        <div class="shadow-bottom"></div>
+        <div class="main-menu-content">
+            <ul class="navigation navigation-main" id="main-menu-navigation" data-menu="menu-navigation" data-icon-style="lines">
+
+                <li class=" navigation-header text-truncate"><span data-i18n="Apps">Apps</span>
+                </li>
+                <li class=" nav-item"><a href="meta"><span class="menu-title text-truncate" data-i18n="Email">Home</span></a>
+                </li>
+                <li class=" nav-item"><a href="meta"><span class="menu-title text-truncate" data-i18n="Chat">Dataframe Meta</span></a>
+                </li>
+                <li class=" nav-item"><a href="featuremeta"><span class="menu-title text-truncate" data-i18n="Todo">Feature Meta</span></a>
+                    <ul class="menu-content">
+                        {% for feature_name_link in last_feature %}
+
+                        <li><a class="d-flex align-items-center" href="featuremeta?feature={{feature_name_link}}"><span class="menu-item text-truncate" data-i18n="Invoice List">{{feature_name_link}}</span></a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </li>
+                </ul>
+            <ul class="navigation"  data-menu="menu-navigation" data-icon-style="lines">
+               <li> <button type="button" class="btn btn-outline-primary mb-1 btn-block" data-toggle="modal" data-target="#compare-dataframe">
+                                             Compare Dataframes
+               </button></li>
+            <li><button type="button" class="btn btn-outline-primary mb-1 btn-block" data-toggle="modal" data-target="#compare-feature">
+                                             Compare Features
+            </button></li>
+            <li><button type="button" class="btn btn-outline-primary btn-block" data-toggle="modal" data-target="#single-entity">
+                                             Search Entity
+            </button></li>
+            </ul>
+        </div>
+    </div>
+
+<div class="app-content content">
+        <div class="content-overlay"></div>
+        <div class="content-wrapper">
+            <div class="content-header row">
+            </div>
+            <div class="content-body">
+                <!-- Dashboard Ecommerce Starts -->
+                <section id="dashboard-ecommerce">
+                    <div class="row ">
+                        <!-- Greetings Content Starts -->
+                        <div class="d-flex col-xl-12 col-md-6 col-12  dashboard-greetings ">
+                            <div class="card full-width">
+                                <div class="card-body">
+                                    <h1 class="text-center">Comparing: {{op_index_1}} → {{op_index_2}}</h1>
+
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row ">
+                        <!-- Greetings Content Starts -->
+                        <div class="d-flex col-xl-3 col-md-6 col-12  dashboard-greetings ">
+                            <div class="card full-width">
+                                <div class="card-header">
+                                    <h1 class="greeting-text">Shape</h1>
+                                </div>
+                                <div class="card-body ">
+                                    <h2 class="text-left" style="line-height: 2em">Rows:</h2>
+                                    <h3 class="text-right" id="index_num"  style="line-height: 2em;overflow-y: auto; overflow-x:auto">{{df_meta[op_index_1]['N_Index']}}    →    {{df_meta[op_index_2]['N_Index']}}</h3>
+                                    <h2 class="text-left" style="line-height: 2em">Columns:</h2>
+                                    <h3 class="text-right" id="col_num" style="line-height: 2em;overflow-y: auto; overflow-x:auto">{{df_meta[op_index_1]['N_Column']}}    →    {{df_meta[op_index_2]['N_Column']}}</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Multi Radial Chart Starts -->
+                        <div class="d-flex col-xl-5 col-md-6 col-12 dashboard-visit ">
+
+                            <div class="card full-width" style="display: flex">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h1 class="greeting-text">Features</h1>
+                                </div>
+                                <div class="row" style="max-height: 285px">
+                                    <div class="card-body col-xl-5" id="feature_names" style="overflow-y: auto; overflow-x:auto;max-height: 285px" >
+                                    {% for col_1 in df_meta[op_index_1]['Columns'] %}
+
+                                    <h5 class="text-center">{{col_1}}</h5>
+
+                                    {% endfor %}
+
+                                </div>
+                                    <div class="card-body col-xl-2 " style="padding-top: 10vh;max-height: 285px">
+                                        <div class="text-center " ><h3>→</h3></div>
+                                    </div>
+                                    <div class="card-body col-xl-5" id="feature_names1" style="overflow-y: auto; overflow-x:auto;max-height: 285px" >
+                                    {% for col_2 in df_meta[op_index_2]['Columns'] %}
+
+                                    <h5 class="text-center">{{col_2}}</h5>
+
+                                    {% endfor %}
+
+                                </div>
+
+                                </div>
+                            </div>
+                        </div>
+                        <div class=" d-flex col-xl-4 col-md-6 col-12 dashboard-greetings ">
+                            <div class="card full-width">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h1 class="greeting-text">Dtypes</h1>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div class="row">
+                                        <div class="col-6 text-center">
+                                            <h3  >{{op_index_1}}</h3>
+                                        </div>
+                                        <div class="col-6 text-center">
+                                            <h3 > {{op_index_2}}</h3>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-6" id="multi-radial-chart-1"></div>
+                                        <div class="col-6" id="multi-radial-chart-2"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="dflex col-xl-6 col-12 dashboard-order-summary">
+                            <div class="card full-width">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h1 class="card-title">NaN Percentage {{op_index_1}}</h1>
+
+                                </div>
+                                <div class="card-body p-0">
+                                    <div id="bar-chart-percentage-1"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Latest Update Starts -->
+                        <div class="dflex col-xl-6 col-12 dashboard-order-summary">
+                            <div class="card full-width">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h1 class="card-title">NaN Percentage {{op_index_2}}</h1>
+
+                                </div>
+                                <div class="card-body p-0">
+                                    <div id="bar-chart-percentage-2"></div>
+                                </div>
+                            </div>
+                        </div>                        <!-- Earning Swiper Starts -->
+                        <!-- Marketing Campaigns Starts -->
+                    </div>
+                                        <div class="row">
+                        <div class="dflex col-xl-6 col-12 dashboard-order-summary">
+                            <div class="card full-width">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h1 class="card-title">Correlation Matrix {{op_index_1}}</h1>
+
+                                </div>
+                                <div class="card-body p-0">
+                                    <div id="correlation-matrix-chart-1"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Latest Update Starts -->
+                        <div class="dflex col-xl-6 col-12 dashboard-order-summary">
+                            <div class="card full-width">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h1 class="card-title">Correlation Matrix {{op_index_2}}</h1>
+
+                                </div>
+                                <div class="card-body p-0">
+                                    <div id="correlation-matrix-chart-2"></div>
+                                </div>
+                            </div>
+                        </div>                        <!-- Earning Swiper Starts -->
+                        <!-- Marketing Campaigns Starts -->
+                    </div>
+
+                </section>
+                <!-- Dashboard Ecommerce ends -->
+                    <div class="row">
+                        <div class="dflex col-xl-12 col-12 dashboard-order-summary">
+                            <div class="card full-width">
+                                <div class="card-header d-flex  ">
+                                    <h2 > Code of Last Activity {{op_index_1}}</h2>
+                                </div>
+                                <div class="card-body" style="padding-left:50px">
+                                    <h4 id="code_activity_1"> Line: {{df_meta[op_index_1]['CodeLine']}} Code: {{df_meta[op_index_1]['Code']}}</h4>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                <div class="row">
+                        <div class="dflex col-xl-12 col-12 dashboard-order-summary">
+                            <div class="card full-width">
+                                <div class="card-header d-flex  ">
+                                    <h2 > Code of Last Activity {{op_index_2}}</h2>
+                                </div>
+                                <div class="card-body" style="padding-left:50px">
+                                    <h4 id="code_activity_"> Line: {{df_meta[op_index_2]['CodeLine']}} Code: {{df_meta[op_index_2]['Code']}}</h4>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                <div class="row">
+                        <div class="dflex col-xl-12 col-12 dashboard-order-summary">
+                            <div class="card full-width">
+                                <div class="card-header d-flex">
+                                    <h2>Dataframe Level Operations</h2>
+                                </div>
+                                <div class="card-body" style="overflow-x: auto">
+                                    <svg id="svg-canvas" width=1000 height=600></svg>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+            </div>
+        </div>
+    </div>
+    <!-- END: Content-->
+<!-- BEGIN: Vendor JS-->
+
+    <script type="text/javascript" src="{{ url_for('static', filename='test_meta_dashboard/js/vendors.min.js') }}"></script>
+    <script type="text/javascript" src="{{ url_for('static', filename='test_meta_dashboard/js/LivIconsEvo.tools.js') }}"></script>
+    <script type="text/javascript" src="{{ url_for('static', filename='test_meta_dashboard/js/LivIconsEvo.defaults.js') }}"></script>
+    <script type="text/javascript" src="{{ url_for('static', filename='test_meta_dashboard/js/LivIconsEvo.min.js') }}"></script>
+    <!-- BEGIN Vendor JS-->
+
+    <!-- BEGIN: Page Vendor JS-->
+    <script type="text/javascript" src="{{ url_for('static', filename='test_meta_dashboard/js/apexcharts.min.js') }}"></script>
+    <script type="text/javascript" src="{{ url_for('static', filename='test_meta_dashboard/js/swiper.min.js') }}"></script>
+    <!-- END: Page Vendor JS-->
+
+    <!-- BEGIN: Theme JS-->
+    <script type="text/javascript" src="{{ url_for('static', filename='test_meta_dashboard/js/vertical-menu-light.js') }}"></script>
+    <script type="text/javascript" src="{{ url_for('static', filename='test_meta_dashboard/js/app-menu.js') }}"></script>
+    <script type="text/javascript" src="{{ url_for('static', filename='test_meta_dashboard/js/app.js') }}"></script>
+    <script type="text/javascript" src="{{ url_for('static', filename='test_meta_dashboard/js/components.js') }}"></script>
+    <script type="text/javascript" src="{{ url_for('static', filename='test_meta_dashboard/js/footer.js') }}"></script>
+    <!-- END: Theme JS-->
+
+    <!-- BEGIN: Page JS-->
+<script src="http://d3js.org/d3.v4.min.js"></script>
+    <script type="text/javascript" src="{{ url_for('static', filename='test_meta_dashboard/js/compare_dataframe_charts.js') }}"></script>
+<script type = "text/javascript" src = "{{ url_for('static', filename = 'dagre-d3-master/dist/dagre-d3.js') }}" ></script>
+<script type = "text/javascript" src = "{{ url_for('static', filename = 'dagre-master/dist/dagre.js') }}" ></script>
+<script type="text/javascript" src="{{ url_for('static', filename='compare_dataframe.js') }}"></script>
+</body>
+</html>

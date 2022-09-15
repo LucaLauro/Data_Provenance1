@@ -1,52 +1,4 @@
 
-function update_text() {
-      document.getElementById("index_num").innerText=df_meta[op_index]['N_Index'];
-      document.getElementById("col_num").innerText=df_meta[op_index]['N_Column'];
-            document.getElementById("code_activity").innerText='Line: '+df_meta[op_index]['CodeLine']+' Code: '+df_meta[op_index]['Code'];
-
-      const list = document.getElementById("feature_names");
-      var features=''
-      for (const feature_index in df_meta[op_index]['Columns']) {
-          console.log(feature_index)
-          features+='<h5 class="text-center">'+df_meta[op_index]['Columns'][feature_index]+'</h5>';
-      }
-      list.innerHTML = features;
-      var percentage_categories=[]
-      var percentage_values=[]
-      for (const index in df_meta[op_index]['NaNPercent']) {
-          percentage_values.push(df_meta[op_index]['NaNPercent'][index][0])
-          percentage_categories.push(df_meta[op_index]['NaNPercent'][index][1])
-      }
-      chart_bar_percentage.updateOptions({
-         xaxis: {
-            categories: percentage_categories
-         },
-         series: [{
-            data: percentage_values
-         }],
-      });
-      var corrmatrix=[]
-      for (const index in df_meta[op_index]['CorrMatrix'][1]) {
-          corrmatrix.push({name:df_meta[op_index]['CorrMatrix'][1][index],data: df_meta[op_index]['CorrMatrix'][0][index]})
-      };
-      console.log(corrmatrix);
-      chart_corr_matrix.updateOptions({
-         xaxis: {
-            categories: df_meta[op_index]['CorrMatrix'][1]
-         },
-         series: corrmatrix.reverse(),
-      });
-
-
-     multiradialChart.updateOptions({
-         labels: df_meta[op_index]['Dtype_percent'][1],
-         series: df_meta[op_index]['Dtype_percent'][0],
-      });
-
-}
-
-
-
 // Create the input graph
 var g = new dagre.graphlib.Graph()
   .setGraph({nodesep: 100,
@@ -120,7 +72,7 @@ svgGroup.selectAll('g.node.activity')
 svg.attr("width", g.graph().width + 120);
 
 
-svgGroup.selectAll('g.node.dfmeta')
+svgGroup.selectAll('g.node.featuremeta')
 .attr("data-tooltip", function(v) {
       return g.node(v).label
   })
@@ -131,7 +83,7 @@ svgGroup.selectAll('g.node.dfmeta')
       .style("left",(event.pageX+10)+"px");
 })
   .on("mouseout", function(){return tooltip.style("visibility", "hidden");})
-    .on("click", function(d){op_index=g.node(d).label;console.log(op_index); update_text();});
+    ;
 
 
 

@@ -131,7 +131,7 @@ svgGroup.selectAll('g.node.dfmeta')
       .style("left",(event.pageX+10)+"px");
 })
   .on("mouseout", function(){return tooltip.style("visibility", "hidden");})
-    .on("click", function(d){op_index=g.node(d).label;console.log(op_index); update_text();});
+   ;
 
 
 

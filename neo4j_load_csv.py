@@ -20,19 +20,19 @@ def delete_all(tx):
 def create_entities(tx, file_path):
     tx.run(f'LOAD CSV WITH HEADERS FROM "file:///{file_path}" AS row CREATE (e:Entity {{EntityId: row.id, record_id: row.record_id}})')
 def create_df_metadata(tx,file_path):
-    tx.run(f'LOAD CSV WITH HEADERS FROM "file:///{file_path}" AS row CREATE (d:DfMeta {{DFMetaId: row.id, N_Column: row.n_col,N_Index:row.n_index,NaNPercent:row.list_percent_column_nan,Columns:row.columns,Dtype_percent:row.list_percent_dtypes,CorrMatrix:row.corr_matrix}})')
+    tx.run(f'LOAD CSV WITH HEADERS FROM "file:///{file_path}" AS row CREATE (d:DfMeta {{DFMetaId: row.id, N_Column: row.n_col,N_Index:row.n_index,NaNPercent:row.list_percent_column_nan,Columns:row.columns,Dtype_percent:row.list_percent_dtypes,CorrMatrix:row.corr_matrix,CodeLine:row.code_line,Code:row.code}})')
 
 def create_df_meta_from_relation(tx,file_path):
     tx.run(f'LOAD CSV WITH HEADERS FROM "file:///{file_path}" AS row MATCH (a:Activity {{identifier: row.gen}}) MATCH (df_in:DfMeta {{DFMetaId: row.used}}) MERGE (df_in)-[:META_DERIVATION]->(a)')
 def create_df_meta_to_relation(tx,file_path):
     tx.run(f'LOAD CSV WITH HEADERS FROM "file:///{file_path}" AS row MATCH (df_out:DfMeta {{DFMetaId: row.gen}}) MATCH (a:Activity {{identifier: row.used}}) MERGE (a)-[:META_DERIVATION]->(df_out)')
 def create_feature_metadata(tx,file_path):
-    tx.run(f'LOAD CSV WITH HEADERS FROM "file:///{file_path}" AS row CREATE (f:FeatureMeta {{FeatureMetaId: row.id, feature_name: row.feature_name,index_len:row.index_len,dtype:row.dtype,distinct_values:row.distinct_values,describe_list:row.describe_list,dist_plot:row.dist_plot}})')
+    tx.run(f'LOAD CSV WITH HEADERS FROM "file:///{file_path}" AS row CREATE (f:FeatureMeta {{FeatureMetaId: row.id, feature_name: row.feature_name,index_len:row.index_len,dtype:row.dtype,distinct_values:row.distinct_values,describe_list:row.describe_list,dist_plot:row.dist_plot,CodeLine:row.code_line,Code:row.code}})')
 
 def create_feature_meta_from_relation(tx,file_path):
-    tx.run(f'LOAD CSV WITH HEADERS FROM "file:///{file_path}" AS row MATCH (a:Activity {{identifier: row.gen}}) MATCH (feature_in:FeatureMeta {{FeatureMetaId: row.used}}) MERGE (feature_in)-[:FEATURE_META_DERIVATION]->(a)')
+    tx.run(f'LOAD CSV WITH HEADERS FROM "file:///{file_path}" AS row MATCH (a:Activity {{identifier: row.gen}}) MATCH (feature_in:FeatureMeta {{FeatureMetaId: row.used}}) MERGE (feature_in)-[:FEATURE_META_ACTIVITY]->(a)')
 def create_feature_meta_to_relation(tx,file_path):
-    tx.run(f'LOAD CSV WITH HEADERS FROM "file:///{file_path}" AS row MATCH (feature_out:FeatureMeta {{FeatureMetaId: row.gen}}) MATCH (a:Activity {{identifier: row.used}}) MERGE (a)-[:FEATURE_META_DERIVATION]->(feature_out)')
+    tx.run(f'LOAD CSV WITH HEADERS FROM "file:///{file_path}" AS row MATCH (feature_out:FeatureMeta {{FeatureMetaId: row.gen}}) MATCH (a:Activity {{identifier: row.used}}) MERGE (a)-[:FEATURE_META_ACTIVITY]->(feature_out)')
 def create_feature_meta_derivation(tx,file_path):
     tx.run(f'LOAD CSV WITH HEADERS FROM "file:///{file_path}" AS row MATCH (feature_out:FeatureMeta {{FeatureMetaId: row.gen}}) MATCH (feature_in:FeatureMeta {{FeatureMetaId: row.used}}) MERGE (feature_in)-[:FEATURE_META_DERIVATION]->(feature_out)')
 
